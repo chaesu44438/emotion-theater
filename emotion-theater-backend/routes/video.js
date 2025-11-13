@@ -245,10 +245,13 @@ async function generateSceneTTS(text, characterName, voicePref) {
 // ✅ [수정] 오디오 길이에 맞춰 동영상을 생성합니다 (duration 파라미터 제거)
 function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
   return new Promise((resolve, reject) => {
-    ffmpeg()
+    console.log(`[FFMPEG] 시작 - 입력: ${path.basename(imagePath)}, ${path.basename(audioPath)}`);
+    console.log(`[FFMPEG] 출력: ${path.basename(outputPath)}`);
+
+    const command = ffmpeg()
       .input(imagePath)
-      .inputOptions('-noautorotate') // ✅ [재확인] 이미지의 자동 회전을 방지합니다.
-      .loop() // 이미지를 무한 반복 (-shortest 옵션이 오디오 길이에 맞춰 자름)
+      .inputOptions('-noautorotate')
+      .loop()
       .input(audioPath)
       .outputOptions([
         "-c:v libx264",
@@ -256,32 +259,74 @@ function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
         "-c:a aac",
         "-b:a 192k",
         "-pix_fmt yuv420p",
-        "-shortest", // 오디오 길이에 맞춰 동영상 생성
+        "-shortest",
       ])
       .output(outputPath)
-      .on("end", () => resolve())
-      .on("error", (err) => reject(err))
-      .run();
+      .on("start", (commandLine) => {
+        console.log(`[FFMPEG] 명령어: ${commandLine}`);
+      })
+      .on("progress", (progress) => {
+        if (progress.percent) {
+          console.log(`[FFMPEG] 진행: ${progress.percent.toFixed(1)}%`);
+        }
+      })
+      .on("stderr", (stderrLine) => {
+        // ffmpeg의 상세 출력 (너무 많으면 필터링)
+        if (stderrLine.includes('error') || stderrLine.includes('Error')) {
+          console.log(`[FFMPEG] stderr: ${stderrLine}`);
+        }
+      })
+      .on("end", () => {
+        console.log(`[FFMPEG] 완료: ${path.basename(outputPath)}`);
+        resolve();
+      })
+      .on("error", (err, stdout, stderr) => {
+        console.error(`[FFMPEG] 오류 발생!`);
+        console.error(`[FFMPEG] 오류 메시지: ${err.message}`);
+        if (stderr) console.error(`[FFMPEG] stderr: ${stderr.substring(0, 500)}`);
+        reject(err);
+      });
+
+    command.run();
   });
 }
 
 // 여러 동영상을 하나로 결합
 function concatenateVideos(videoPaths, outputPath) {
   return new Promise((resolve, reject) => {
+    console.log(`[FFMPEG-CONCAT] ${videoPaths.length}개 동영상 병합 시작`);
     const listFile = path.join(TEMP_DIR, `concat_${Date.now()}.txt`);
     const listContent = videoPaths.map((p) => `file '${p}'`).join("\n");
     fs.writeFileSync(listFile, listContent);
+    console.log(`[FFMPEG-CONCAT] 병합 목록 파일: ${listFile}`);
 
     ffmpeg()
       .input(listFile)
       .inputOptions(["-f concat", "-safe 0"])
       .outputOptions(["-c copy"])
       .output(outputPath)
+      .on("start", (commandLine) => {
+        console.log(`[FFMPEG-CONCAT] 명령어: ${commandLine}`);
+      })
+      .on("progress", (progress) => {
+        if (progress.percent) {
+          console.log(`[FFMPEG-CONCAT] 진행: ${progress.percent.toFixed(1)}%`);
+        }
+      })
+      .on("stderr", (stderrLine) => {
+        if (stderrLine.includes('error') || stderrLine.includes('Error')) {
+          console.log(`[FFMPEG-CONCAT] stderr: ${stderrLine}`);
+        }
+      })
       .on("end", () => {
+        console.log(`[FFMPEG-CONCAT] 병합 완료: ${path.basename(outputPath)}`);
         fs.unlinkSync(listFile);
         resolve();
       })
-      .on("error", (err) => {
+      .on("error", (err, stdout, stderr) => {
+        console.error(`[FFMPEG-CONCAT] 오류 발생!`);
+        console.error(`[FFMPEG-CONCAT] 오류 메시지: ${err.message}`);
+        if (stderr) console.error(`[FFMPEG-CONCAT] stderr: ${stderr.substring(0, 500)}`);
         if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
         reject(err);
       })
