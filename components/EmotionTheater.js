@@ -36,6 +36,7 @@ function EmotionTheater () {
     emotion: "",
     comment: "",
     referenceImageUrl: "", // ✅ 참조 이미지 URL 상태 추가
+    gender: "",
   });
 
   const [generatedStory, setGeneratedStory] = useState("");
@@ -43,9 +44,9 @@ function EmotionTheater () {
   const [isRegenerating, setIsRegenerating] = useState(false); // ✅ 삽화 재생성 로딩 상태
 
   // Translation states
-  const [translatedStory, setTranslatedStory] = useState("");
-  const [isTranslating, setIsTranslating] = useState(false);
-  const [currentLanguage, setCurrentLanguage] = useState("ko"); // 'ko' or 'en'
+  const [translations, setTranslations] = useState({}); // ex: { en: "...", zh: "...", ja: "..." }
+  const [isTranslatingTo, setIsTranslatingTo] = useState(null); // 'en', 'zh', 'ja' or null
+  const [currentLanguage, setCurrentLanguage] = useState("ko"); // 'ko', 'en', 'zh', 'ja'
   const [translationError, setTranslationError] = useState(null);
 
   const [illustrationUrl, setIllustrationUrl] = useState("");
@@ -63,11 +64,50 @@ function EmotionTheater () {
   const [userList, setUserList] = useState([]);
   const [adminError, setAdminError] = useState('');
   // ✅ [추가] 프롬프트 관리 상태
-  const [prompts, setPrompts] = useState({ storyPrompt: '', imagePromptSystem: '' });
+  const [prompts, setPrompts] = useState({
+    storyPrompt: '',
+    imagePromptSystem: '',
+    placeholderBannedKeywords: '', // ✅ 대체 프롬프트 금지 키워드
+    placeholderStylePrompt: '', // ✅ 대체 프롬프트 스타일
+  });
   const [isSavingPrompts, setIsSavingPrompts] = useState(false);
   const [promptSaveStatus, setPromptSaveStatus] = useState(''); // 'success' | 'error' | ''
   // ✅ [추가] 관리자 페이지 뷰 상태 ('users' | 'prompts')
   const [adminView, setAdminView] = useState('users');
+
+  // ✅ [수정] createSafePlaceholderPrompt 함수를 컴포넌트 내부로 이동
+  // prompts 상태에 따라 동적으로 프롬프트를 생성하도록 수정
+  const createSafePlaceholderPrompt = (userData) => {
+    const age = parseInt(userData.age, 10);
+    let ageDescriptor = `${age}-year-old`;
+    if (age <= 3) ageDescriptor += ' toddler';
+    else if (age <= 7) ageDescriptor += ' young child';
+    else if (age <= 12) ageDescriptor += ' kid';
+    else if (age <= 17) ageDescriptor += ' teenager';
+    else ageDescriptor += ' adult';
+
+    // ✅ 상태에서 금지 키워드 목록을 가져옴 (쉼표, 공백, 줄바꿈으로 구분)
+    const bannedKeywords = (prompts.placeholderBannedKeywords || '').split(/[\s, \n]+/).filter(Boolean);
+
+    const emotionLabel = SAFE_EMOTIONS.find(e => e.id === userData.emotion)?.label || '감정';
+    const gender = userData.gender === 'male' ? 'boy' : 'girl';
+
+    const safeComment = userData.comment.split(/\s+/).filter(word =>
+      !bannedKeywords.some(banned => word.toLowerCase().includes(banned))
+    ).join(' ');
+
+    const promptParts = [
+      `A ${ageDescriptor} ${gender}`,
+      `with a(n) ${emotionLabel} expression on their face.`,
+      safeComment,
+      prompts.placeholderStylePrompt || '' // ✅ 상태에서 스타일 프롬프트 가져옴
+    ];
+
+    const finalPrompt = promptParts.filter(Boolean).join(', ');
+    const keywords = finalPrompt.replace(/\./g, '').split(/[\s,]+/).filter(Boolean).join(',');
+
+    return `https://source.unsplash.com/featured/?${encodeURIComponent(keywords)}`;
+  };
 
   // ✅ [수정] 동영상 생성 상태: isGeneratingVideo를 제거하고 stage로 관리합니다.
   const [currentVideoStory, setCurrentVideoStory] = useState(null);
@@ -78,6 +118,12 @@ function EmotionTheater () {
   const [completedVideoId, setCompletedVideoId] = useState(null);
   const [pollingVideoId, setPollingVideoId] = useState(null); // 폴링 중인 videoId
 
+
+  // ✅ [추가] 동화 생성 취소 확인 모달 상태
+  const [showCancelModal, setShowCancelModal] = useState(false);
+
+  // ✅ [추가] API 요청 취소를 위한 AbortController 참조
+  const abortControllerRef = useRef(null);
 
   // 커튼 애니메이션
   // ... (커튼 애니메이션 로직은 로그인 성공 후 등으로 이동 가능, 일단 생략)
@@ -148,6 +194,8 @@ function EmotionTheater () {
       setPrompts({
         storyPrompt: currentPrompts.storyPrompt || window.DEFAULT_STORY_PROMPT || "",
         imagePromptSystem: currentPrompts.imagePromptSystem || window.DEFAULT_IMAGE_PROMPT_SYSTEM || "",
+        placeholderBannedKeywords: currentPrompts.placeholderBannedKeywords || '피,죽음,살인,폭력,전쟁,고문,자해,증오,차별,섹스,포르노,누드,음란,총,칼,무기,마약,blood,death,kill,violence,war,torture,hate,gun,knife,weapon,drug,sex,nude,porn',
+        placeholderStylePrompt: currentPrompts.placeholderStylePrompt || 'storybook illustration, dreamy, soft light, detailed, high quality',
       });
     } catch (e) {
       console.error("프롬프트 로드 오류:", e);
@@ -201,99 +249,123 @@ function EmotionTheater () {
     }
   };
 
-  const generateStory = async () => {
-    if (isGenerating) return; // ✅ 중복 클릭 방지
-    setIsGenerating(true);
+  // ✅ [수정] useCallback을 사용하여 불필요한 함수 재생성을 방지하고, 안정성을 높입니다.
+  const generateStory = useCallback(async () => {
+    if (isGenerating) return;
 
-    // ✅ [수정] 먼저 로딩 화면이 있는 story 페이지로 이동합니다.
+    // 1. 상태를 먼저 설정하여 UI를 업데이트합니다.
+    setIsGenerating(true);
     setStage("story");
 
+    // 2. API 호출을 위한 새로운 AbortController를 생성합니다.
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      // 1) ✅ 백엔드에 동화 생성을 요청합니다.
-      const { story, illustrationUrl: imgUrl } = await apiService.generateStory(userData);
+      // 3. 백엔드에 동화 생성을 요청합니다.
+      const { story, illustrationUrl: imgUrl } = await apiService.generateStory(
+        userData,
+        controller.signal
+      );
+
+      // 4. 생성된 데이터로 상태를 업데이트합니다.
       setGeneratedStory(story);
       setIllustrationUrl(imgUrl || "");
 
-      // 2) 보관 저장
+      // 5. 생성된 동화를 보관함에 저장합니다.
       const label = (SAFE_EMOTIONS.find(e => e.id === userData.emotion)?.label) || "";
       const title = `[${label}] ${userData.comment ? userData.comment.slice(0, 24) : "오늘의 기록"}`;
       const record = {
-        id: `story-${Date.now()}`, // 프론트엔드에서 임시 ID 생성
+        id: `story-${Date.now()}`,
         ...userData,
         story,
         title,
-        illustrationUrl: imgUrl || "", // referenceImageUrl은 보관 데이터에 포함됩니다.
+        illustrationUrl: imgUrl || "",
       };
+      
+      // CosmosDB 저장을 위해 용량이 큰 참조 이미지 데이터는 제거합니다.
+      const recordToSave = { ...record };
+      delete recordToSave.referenceImageUrl;
 
-      // ✅ [수정] API 서비스를 통해 스토리를 저장하고, DB에 저장된 최종 데이터를 받습니다.
-      const savedRecord = await apiService.saveStory(record);
-      await loadStories(); // ✅ [추가] 저장 후 보관함 목록을 즉시 갱신합니다.
+      await apiService.saveStory(recordToSave);
+      await loadStories();
 
     } catch (e) {
       console.error("동화 생성 실패:", e);
 
-      // ✅ 더 자세한 에러 메시지 추출
-      let errorDetails = "서버 로그를 확인해주세요.";
-      if (e.response?.data?.message) {
-        errorDetails = e.response.data.message;
-      } else if (e.message) {
-        errorDetails = e.message;
+      // 사용자가 직접 취소한 경우, 오류 메시지를 표시하지 않고 조용히 종료합니다.
+      if (e.message.includes('사용자에 의해 취소되었습니다') || e.message.includes('API Error (499)')) {
+        console.log("동화 생성이 사용자에 의해 취소되었습니다.");
+        return;
       }
 
-      // 추가 상세 정보가 있으면 콘솔에 출력
-      if (e.response?.data?.details) {
-        console.error("에러 상세:", e.response.data.details);
+      // ✅ [추가] DALL-E 콘텐츠 정책 위반 오류 처리
+      // ✅ [수정] 백엔드가 동화 내용(story)을 함께 반환한다고 가정
+      if (e.message.includes('content_policy_violation') && e.story) {
+        setGeneratedStory(e.story);
+        // ✅ 생성된 동화 내용을 기반으로 대체 이미지 URL 생성
+        setIllustrationUrl(createSafePlaceholderPrompt(userData, e.story));
+        setImageError("images_permission"); // 사용자에게 안내 메시지를 보여주기 위한 상태 설정
+        return; // 여기서 함수를 종료하여 아래의 일반 오류 처리를 막습니다.
       }
+
+      // 그 외의 오류는 실패 메시지를 화면에 표시합니다.
+      let errorDetails = "서버 로그를 확인해주세요.";
+      if (e.response?.data?.message) errorDetails = e.response.data.message;
+      else if (e.message) errorDetails = e.message;
 
       const label = (SAFE_EMOTIONS.find(x => x.id === userData.emotion)?.label) || "감정";
-      setGeneratedStory(
-        `${userData.name}${userData.category === "child" ? "이" : "님"}의 오늘(${label}) 이야기를 준비하고 있어요.\n\n` +
-        `코멘트: ${userData.comment || "(없음)"}\n\n` +
-        `❌ 동화 생성에 실패했습니다.\n` +
-        `오류: ${errorDetails}\n\n` +
-        `해결 방법:\n` +
-        `- 입력 내용을 확인해주세요 (특정 단어가 필터링될 수 있습니다)\n` +
-        `- 잠시 후 다시 시도해주세요\n` +
-        `- 문제가 계속되면 관리자에게 문의하세요`
-      );
+      setGeneratedStory(`❌ 동화 생성에 실패했습니다.\n오류: ${errorDetails}`);
       setIllustrationUrl("");
     } finally {
+      // 6. 작업 완료 후 로딩 상태를 해제하고 컨트롤러 참조를 정리합니다.
       setIsGenerating(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
-  };
+  }, [isGenerating, userData, loadStories]); // ✅ 의존성 배열을 명시하여, 필요한 경우에만 함수가 재생성되도록 합니다.
 
-  const handleTranslate = async () => {
-    if (isTranslating || !generatedStory) return;
-    setIsTranslating(true);
+  const handleTranslate = async (targetLang) => {
+    // 이미 해당 언어로 번역된 경우, 언어만 변경
+    if (translations[targetLang]) {
+      setCurrentLanguage(targetLang);
+      return;
+    }
+
+    // 한국어(원문)를 선택한 경우
+    if (targetLang === 'ko') {
+      setCurrentLanguage('ko');
+      return;
+    }
+
+    if (isTranslatingTo || !generatedStory) return;
+
+    setIsTranslatingTo(targetLang);
     setTranslationError(null);
     try {
-      // Note: The backend expects the 'to' language code. 'en' for English.
-      const { translation } = await apiService.translateText(generatedStory, 'en');
-      setTranslatedStory(translation);
-      setCurrentLanguage('en');
+      const { translation } = await apiService.translateText(generatedStory, targetLang);
+      setTranslations(prev => ({ ...prev, [targetLang]: translation }));
+      setCurrentLanguage(targetLang);
     } catch (error) {
       console.error("Translation error:", error);
-      setTranslationError("번역에 실패했습니다. 잠시 후 다시 시도해주세요.");
+      setTranslationError(`번역에 실패했습니다 (${targetLang}). 잠시 후 다시 시도해주세요.`);
     } finally {
-      setIsTranslating(false);
+      setIsTranslatingTo(null);
     }
-  };
-
-  const switchToKorean = () => {
-    setCurrentLanguage('ko');
-    setTranslationError(null);
   };
 
   const openFromList = (it) => {
     setUserData({
       name: it.name, category: it.category, age: it.age,
-      emotion: it.emotion, comment: it.comment, referenceImageUrl: it.referenceImageUrl || ""
+      emotion: it.emotion, comment: it.comment, referenceImageUrl: it.referenceImageUrl || "",
+      gender: it.gender || "",
     });
     setGeneratedStory(it.story);
     setIllustrationUrl(it.illustrationUrl);
     setShowIllustration(true);
     // Reset translation state when opening a story
-    setTranslatedStory("");
+    setTranslations({});
     setCurrentLanguage("ko");
     setTranslationError(null);
     setStage("story");
@@ -413,8 +485,8 @@ useEffect(() => {
 }, [speaking]);
 
 const speakStory = async () => {
-  const text = currentLanguage === 'en' ? translatedStory : generatedStory;
-  if (!text.trim() || speaking) return;
+  const text = currentLanguage === 'ko' ? generatedStory : translations[currentLanguage];
+  if (!text || !text.trim() || speaking) return;
 
   setSpeaking(true);
   setIsPaused(false);
@@ -540,6 +612,7 @@ const stopTTS = () => {
       emotion: "",
       comment: "",
       referenceImageUrl: "",
+      gender: "",
     });
     setGeneratedStory("");
     setIllustrationUrl("");
@@ -587,7 +660,12 @@ const stopTTS = () => {
     setIsSavingPrompts(true);
     setPromptSaveStatus('');
     try {
-      await apiService.updatePrompts(prompts.storyPrompt, prompts.imagePromptSystem);
+      await apiService.updatePrompts({
+        storyPrompt: prompts.storyPrompt,
+        imagePromptSystem: prompts.imagePromptSystem,
+        placeholderBannedKeywords: prompts.placeholderBannedKeywords,
+        placeholderStylePrompt: prompts.placeholderStylePrompt,
+      });
       setPromptSaveStatus('success');
       // 3초 후 성공 메시지 숨기기
       setTimeout(() => setPromptSaveStatus(''), 3000);
@@ -833,20 +911,44 @@ const stopTTS = () => {
           <div key="age" className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-gray-300 relative w-full max-w-md">
             <button onClick={() => setStage("category")} className="mb-4 text-gray-700 hover:text-yellow-600">← 뒤로가기</button>
             <div className="text-center mb-8">
-              <h2 className="text-3xl font-bold mb-2">나이를 알려주세요</h2>
+              <h2 className="text-3xl font-bold mb-2">나이와 성별을 알려주세요</h2>
             </div>
             <input
               type="number"
               value={userData.age}
               onChange={(e) => setUserData({ ...userData, age: e.target.value })}
-              onKeyDown={(e) => e.key === "Enter" && nextIf(userData.age, "emotion")}
+              onKeyDown={(e) => e.key === "Enter" && nextIf(userData.age && userData.gender, "emotion")}
               placeholder="나이를 입력하세요"
               className="w-full px-6 py-4 rounded-xl bg-white border-2 border-gray-300 text-gray-900 placeholder-gray-400 text-center text-xl focus:border-yellow-400 transition-all"
               autoFocus
             />
+            <div className="flex justify-center gap-4 mt-4">
+              <label className="flex items-center gap-2 p-3 rounded-lg border-2 border-gray-300 has-[:checked]:border-pink-400 has-[:checked]:bg-pink-50 transition-all">
+                <input
+                  type="radio"
+                  name="gender"
+                  value="female"
+                  checked={userData.gender === 'female'}
+                  onChange={(e) => setUserData({ ...userData, gender: e.target.value })}
+                  className="w-5 h-5 accent-pink-500"
+                />
+                <span className="font-semibold">여</span>
+              </label>
+              <label className="flex items-center gap-2 p-3 rounded-lg border-2 border-gray-300 has-[:checked]:border-blue-400 has-[:checked]:bg-blue-50 transition-all">
+                <input
+                  type="radio"
+                  name="gender"
+                  value="male"
+                  checked={userData.gender === 'male'}
+                  onChange={(e) => setUserData({ ...userData, gender: e.target.value })}
+                  className="w-5 h-5 accent-blue-500"
+                />
+                <span className="font-semibold">남</span>
+              </label>
+            </div>
             <button
               onClick={() => nextIf(userData.age, "emotion")}
-              disabled={!userData.age}
+              disabled={!userData.age || !userData.gender}
               className="w-full mt-6 px-6 py-4 bg-gradient-to-r from-yellow-400 to-pink-400 text-white rounded-xl font-bold text-xl hover:from-yellow-500 hover:to-pink-500 disabled:opacity-50 transition-all shadow-lg"
             >
               다음으로
@@ -970,24 +1072,26 @@ const stopTTS = () => {
         {stage === "story" && (
           <div key="story" className="bg-white/70 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-gray-300 relative w-full max-w-md">
             {/* ✅ [수정] 뒤로가기 버튼 클릭 시 이름 입력 단계로 이동하고, 참조 이미지 등 일부 상태를 초기화합니다. */}
-            <button onClick={() => {
-                stopTTS(); // TTS 정지
-                // 다음 동화 만들기를 위해 일부 상태 초기화 (이름, 나이, 유형은 유지)
-                setUserData(u => ({
-                  ...u,
-                  emotion: "",
-                  comment: "",
-                  referenceImageUrl: "", // 참조 이미지 URL 초기화
-                }));
-                setGeneratedStory("");
-                setIllustrationUrl("");
-                setImageError(null);
-                // Reset translation state
-                setTranslatedStory("");
-                setCurrentLanguage("ko");
-                setTranslationError(null);
-                setStage("name"); // 이름 입력 단계로 이동
-              }} className="mb-4 text-gray-700 hover:text-yellow-600">← 뒤로가기</button>
+            <button
+              onClick={() => {
+                // ✅ [수정] 생성 중일 때는 확인 모달을 띄우고, 아닐 때는 즉시 뒤로 갑니다.
+                if (isGenerating) {
+                  setShowCancelModal(true);
+                } else {
+                  stopTTS(); // TTS 정지
+                  // 다음 동화 만들기를 위해 일부 상태 초기화
+                  setUserData(u => ({ ...u, emotion: "", comment: "", referenceImageUrl: "" }));
+                  setGeneratedStory("");
+                  setIllustrationUrl("");
+                  setImageError(null);
+                  setTranslations({});
+                  setCurrentLanguage("ko");
+                  setTranslationError(null);
+                  setStage("name"); // 이름 입력 단계로 이동
+                }
+              }}
+              className="mb-4 text-gray-700 hover:text-yellow-600"
+            >← 뒤로가기</button>
 
             {isGenerating ? (
               <div className="text-center py-12">
@@ -997,8 +1101,14 @@ const stopTTS = () => {
             ) : (
               <>
                 {imageError === "images_permission" && (
-                  <div className="mb-3 text-xs rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2">
-                    이미지 모델(gpt-image-1) 사용 권한이 없는 API 키입니다. 대시보드에서 결제/조직 인증 후 다시 시도해주세요.
+                  <div className="mb-3 text-sm rounded-lg border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-center">
+                    {illustrationUrl === 'content_policy_placeholder.png' ? (
+                      <>
+                        <strong>삽화를 만들 수 없어요.</strong><br/>입력하신 내용이 콘텐츠 정책에 위배될 수 있습니다.
+                      </>
+                    ) : (
+                      '이미지 모델(dall-e-3) 사용 권한이 없는 API 키입니다. OpenAI 대시보드에서 결제/조직 인증 후 다시 시도해주세요.'
+                    )}
                   </div>
                 )}
 
@@ -1048,12 +1158,15 @@ const stopTTS = () => {
                         />
                       ) : (
                         <img
-                          src={placeholderIllustration(
-                            (SAFE_EMOTIONS.find(e=>e.id===userData.emotion)?.label)||"동화",
-                            userData.emotion
-                          )}
+                          // ✅ [수정] 사용자가 참조 이미지를 올렸다면 그것을 먼저 보여주고,
+                          // 없을 경우에만 서술형 대체 프롬프트를 생성하여 Unsplash 이미지를 요청합니다.
+                          src={userData.referenceImageUrl || createSafePlaceholderPrompt(userData)}
                           alt="플레이스홀더"
-                          className="w-full aspect-[3/2] object-cover rounded-xl border border-dashed border-gray-300"
+                          className={`w-full aspect-[3/2] object-cover rounded-xl border ${
+                            // ✅ 참조 이미지가 있을 때는 실선, 없을 때는 점선으로 표시
+                            userData.referenceImageUrl 
+                              ? 'border-gray-300' 
+                              : 'border-dashed border-gray-300'}`}
                           draggable="false"
                         />
                       ))
@@ -1075,15 +1188,24 @@ const stopTTS = () => {
                         </select>
                     </div>
                     <div className="flex items-center gap-2">
-                        {currentLanguage === 'ko' ? (
-                            <button onClick={handleTranslate} disabled={isTranslating} className="text-sm px-3 py-1 rounded-lg border border-blue-300 bg-blue-100 hover:bg-blue-200 disabled:opacity-50">
-                                {isTranslating ? "번역 중..." : "영문 변환"}
-                            </button>
-                        ) : (
-                            <button onClick={switchToKorean} className="text-sm px-3 py-1 rounded-lg border border-gray-300 bg-white hover:bg-gray-100">
-                                원문 보기
-                            </button>
-                        )}
+                        <label className="text-sm text-gray-700">언어</label>
+                        <select
+                            value={currentLanguage}
+                            onChange={(e) => handleTranslate(e.target.value)}
+                            className="text-sm border border-gray-300 rounded-lg px-2 py-1 bg-white"
+                            disabled={!!isTranslatingTo}
+                        >
+                            <option value="ko">원문 (한국어)</option>
+                            <option value="en" disabled={isTranslatingTo === 'en'}>
+                                {isTranslatingTo === 'en' ? '번역 중...' : '영어'}
+                            </option>
+                            <option value="zh" disabled={isTranslatingTo === 'zh'}>
+                                {isTranslatingTo === 'zh' ? '번역 중...' : '중국어'}
+                            </option>
+                            <option value="ja" disabled={isTranslatingTo === 'ja'}>
+                                {isTranslatingTo === 'ja' ? '번역 중...' : '일본어'}
+                            </option>
+                        </select>
                     </div>
                 </div>
 
@@ -1117,7 +1239,7 @@ const stopTTS = () => {
 
                 <div className="bg-white rounded-2xl p-6 mb-6 max-h-96 overflow-y-auto border border-gray-300">
                   <p className="text-gray-900 leading-relaxed whitespace-pre-line">
-                    {currentLanguage === 'en' ? translatedStory : generatedStory}
+                    {currentLanguage === 'ko' ? generatedStory : (translations[currentLanguage] || '')}
                   </p>
                 </div>
 
@@ -1132,24 +1254,28 @@ const stopTTS = () => {
                             referenceImageUrl: "", // ✅ 참조 이미지 URL 초기화
                           }));
                       
-                          // 생성 결과/이미지 상태 초기화
-                          setGeneratedStory("");
-                          setIllustrationUrl("");
-                          setImageError(null);
-                          // Reset translation state
-                          setTranslatedStory("");
-                          setCurrentLanguage("ko");
-                          setTranslationError(null);
-                      
-                          // ✅ 바로 감정선택 화면으로
-                          setStage("emotion");
-                    }}
+                                                // 생성 결과/이미지 상태 초기화
+                                                setGeneratedStory("");
+                                                setIllustrationUrl("");
+                                                setImageError(null);
+                                                // Reset translation state
+                                                setTranslations({});
+                                                setCurrentLanguage("ko");
+                                                setTranslationError(null);
+                                
+                                                // ✅ 바로 감정선택 화면으로
+                                                setStage("emotion");                    }}
                     className="flex-1 px-6 py-3 bg-gradient-to-r from-yellow-400 to-pink-400 text-white rounded-xl font-bold hover:from-yellow-500 hover:to-pink-500 transition-all shadow-lg"
                   >
                     새 동화 만들기
                   </button>
                 </div>
-                <button onClick={() => setStage("archive")} className="w-full mt-3 px-6 py-3 bg-white text-gray-700 rounded-xl font-semibold border border-gray-300 hover:bg-gray-100 transition-all">
+                <button
+                  onClick={() => {
+                    setPreviousStage("name"); // ✅ 돌아갈 위치를 'name'으로 명시적으로 설정
+                    setStage("archive");
+                  }}
+                  className="w-full mt-3 px-6 py-3 bg-white text-gray-700 rounded-xl font-semibold border border-gray-300 hover:bg-gray-100 transition-all">
                   📄 보관함으로 이동
                 </button>
               </>
@@ -1187,7 +1313,7 @@ const stopTTS = () => {
                       <div className="flex-1">
                         <div className="font-bold text-gray-900 line-clamp-1 text-base">{it.title}</div>
                         <div className="text-xs text-gray-500">
-                          {new Date(it.createdAt).toLocaleString()} · {it.name} · {it.age}세 · {(SAFE_EMOTIONS.find(e=>e.id===it.emotion)?.label)||"감정"}
+                          {new Date(it.createdAt).toLocaleString()} · {it.name} · {it.age}세 · {it.gender === 'male' ? '남' : it.gender === 'female' ? '여' : ''} · {(SAFE_EMOTIONS.find(e=>e.id===it.emotion)?.label)||"감정"}
                         </div>
                       </div>
                       <button
@@ -1348,6 +1474,18 @@ const stopTTS = () => {
                     <label htmlFor="imagePromptSystem" className="block text-sm font-medium text-gray-700 mb-1">삽화 생성 프롬프트 (System Role)</label>
                     <textarea id="imagePromptSystem" rows="8" value={prompts.imagePromptSystem} onChange={(e) => setPrompts(p => ({ ...p, imagePromptSystem: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"></textarea>
                   </div>
+                  {/* ✅ [추가] 대체 프롬프트 수정 영역 */}
+                  <div className="border-t border-gray-300 pt-4">
+                    <h4 className="text-lg font-semibold mb-2 text-gray-800">대체 프롬프트 (플레이스홀더)</h4>
+                    <div>
+                      <label htmlFor="placeholderBannedKeywords" className="block text-sm font-medium text-gray-700 mb-1">금지 키워드 (쉼표, 공백, 줄바꿈으로 구분)</label>
+                      <textarea id="placeholderBannedKeywords" rows="4" value={prompts.placeholderBannedKeywords} onChange={(e) => setPrompts(p => ({ ...p, placeholderBannedKeywords: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"></textarea>
+                    </div>
+                    <div className="mt-4">
+                      <label htmlFor="placeholderStylePrompt" className="block text-sm font-medium text-gray-700 mb-1">스타일 프롬프트</label>
+                      <textarea id="placeholderStylePrompt" rows="4" value={prompts.placeholderStylePrompt} onChange={(e) => setPrompts(p => ({ ...p, placeholderStylePrompt: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"></textarea>
+                    </div>
+                  </div>
                 </div>
                 <div className="mt-4 flex items-center justify-end gap-4">
                   {promptSaveStatus === 'success' && <span className="text-sm text-green-600">성공적으로 저장되었습니다!</span>}
@@ -1441,6 +1579,47 @@ const stopTTS = () => {
           </div>
         )}
 
+        {/* ✅ [추가] 동화 생성 취소 확인 모달 */}
+        {showCancelModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white/90 backdrop-blur-md rounded-3xl p-8 shadow-2xl border-2 border-red-400 w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+              <div className="text-center">
+                <div className="text-5xl mb-4">🤔</div>
+                <h2 className="text-2xl font-bold mb-2 text-gray-900">정말로 취소하시겠어요?</h2>
+                <p className="text-gray-600 mb-6">지금 돌아가면 만들고 있던 동화가 사라져요.</p>
+                <div className="flex flex-col md:flex-row gap-3">
+                  <button
+                    onClick={() => {
+                      // 실제 취소 로직 실행
+                      if (abortControllerRef.current) {
+                        abortControllerRef.current.abort();
+                        abortControllerRef.current = null;
+                      }
+                      setIsGenerating(false);
+                      stopTTS();
+                      // 상태 초기화
+                      setUserData(u => ({ ...u, emotion: "", comment: "", referenceImageUrl: "" }));
+                      setGeneratedStory("");
+                      setIllustrationUrl("");
+                      setImageError(null);
+                      setTranslatedStory("");
+                      setCurrentLanguage("ko");
+                      setTranslationError(null);
+                      setShowCancelModal(false); // 모달 닫기
+                      setStage("name"); // 이전 단계로 이동
+                    }}
+                    className="w-full px-6 py-3 bg-red-500 text-white rounded-xl font-bold text-lg hover:bg-red-600 transition-all shadow-lg"
+                  >
+                    예, 취소할래요
+                  </button>
+                  <button onClick={() => setShowCancelModal(false)} className="w-full px-6 py-3 bg-white text-gray-700 rounded-xl font-semibold border border-gray-300 hover:bg-gray-100 transition-all">
+                    아니요, 계속 만들래요
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   );
 }

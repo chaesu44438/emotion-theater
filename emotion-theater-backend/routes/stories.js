@@ -28,7 +28,7 @@ const dalleClient = new AzureOpenAI({
 // [POST] /api/stories/generate - 동화 및 삽화 생성
 router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 텍스트와 프롬프트를 모두 생성합니다.
   // ✅ [수정] 참조 이미지 URL을 요청 본문에서 받아옵니다.
-  const { name, category, age, emotion, comment, referenceImageUrl } = req.body;
+  const { name, category, age, emotion, comment, referenceImageUrl, gender } = req.body;
   const userId = req.user.userId; // 인증 미들웨어에서 추가해 준 사용자 정보
 
   if (!name || !emotion) {
@@ -55,81 +55,123 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
       .replace('{name}', name)
       .replace('{category}', category === 'child' ? '어린이' : '어른')
       .replace('{age}', age)
+      .replace('{gender}', gender === 'male' ? '남자' : '여자')
       .replace('{emotion}', emotion)
       .replace('{comment}', comment || "없음");
 
     // ✅ [추가] 이미지 프롬프트 생성을 위한 Promise 변수 선언
     let imagePromptGenerationPromise;
 
+    // ✅ [수정] 프론트엔드에서 전달된 AbortSignal을 사용합니다.
+    // 이 signal은 API 호출 옵션으로 전달됩니다.
+    const signal = req.signal;
+
     // ✅ [추가] 참조 이미지가 있으면 Vision API를, 없으면 기존 방식을 사용합니다.
     if (referenceImageUrl) {
       console.log("[API] 참조 이미지를 사용하여 삽화 프롬프트를 생성합니다. (Vision API)");
       // ✅ [수정] 나이 정보를 명확하게 포함하여 전달합니다.
-      imagePromptGenerationPromise = textClient.chat.completions.create({
-        // 중요: 이 모델 배포 이름은 Vision을 지원하는 모델이어야 합니다. (예: gpt-4-vision-preview, gpt-4o)
-        model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
-        messages: [
-          { role: "system", content: imagePromptSystem },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Create a prompt based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old. Start your prompt with the age descriptor.` },
-              {
-                type: "image_url",
-                image_url: { "url": referenceImageUrl, "detail": "low" }
-              }
-            ]
-          }
-        ],
-        max_tokens: 200,
-        temperature: 0.6,
-      });
+      imagePromptGenerationPromise = textClient.chat.completions.create(
+        { // 1. 요청 본문 (body)
+          // 중요: 이 모델 배포 이름은 Vision을 지원하는 모델이어야 합니다. (예: gpt-4-vision-preview, gpt-4o)
+          model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
+          messages: [
+            { role: "system", content: imagePromptSystem },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: `Create a prompt based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` },
+                {
+                  type: "image_url",
+                  image_url: { "url": referenceImageUrl, "detail": "low" }
+                }
+              ]
+            }
+          ],
+          max_tokens: 200,
+          temperature: 0.6,
+        },
+        { // 2. 요청 옵션 (options)
+          signal // ✅ 프론트엔드에서 받은 signal을 그대로 전달
+        }
+      );
     } else {
       console.log("[API] 텍스트 정보만으로 삽화 프롬프트를 생성합니다.");
-      imagePromptGenerationPromise = textClient.chat.completions.create({
-        model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
-        messages: [
-          { role: "system", content: imagePromptSystem },
-          { role: "user", content: `Create a prompt based on this user input:\n- Character Name: ${name}\n- Age: ${age} years old\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old. Start your prompt with the age descriptor.` }
-        ],
-        max_tokens: 200,
-        temperature: 0.6,
-      });
+      imagePromptGenerationPromise = textClient.chat.completions.create(
+        { // 1. 요청 본문 (body)
+          model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
+          messages: [
+            { role: "system", content: imagePromptSystem },
+            { role: "user", content: `Create a prompt based on this user input:\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` }
+          ],
+          max_tokens: 200,
+          temperature: 0.6,
+        },
+        { // 2. 요청 옵션 (options)
+          signal // ✅ 프론트엔드에서 받은 signal을 그대로 전달
+        }
+      );
     }
 
     // ✅ [수정] 두 개의 API 호출을 Promise.all로 동시에 실행합니다.
     const [storyResponse, imagePromptResponse] = await Promise.all([
       // 1. 동화 텍스트 생성
-      textClient.chat.completions.create({
-        model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
-        messages: [
-          {
-            role: "system",
-            content: "You are a kind and creative storyteller. This is for educational and therapeutic purposes to help children process emotions through storytelling. Always complete stories with a positive ending."
-          },
-          { role: "user", content: storyPrompt }
-        ],
-        max_tokens: 2500,
-        temperature: 0.8
-      }),
-      // 2. 삽화 프롬프트 생성
+      textClient.chat.completions.create(
+        { // 1. 요청 본문 (body)
+          model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
+          messages: [
+            {
+              role: "system",
+              content: "You are a kind and creative storyteller. This is for educational and therapeutic purposes to help children process emotions through storytelling. Always complete stories with a positive ending."
+            },
+            { role: "user", content: storyPrompt }
+          ],
+          max_tokens: 2500,
+          temperature: 0.8
+        },
+        { // 2. 요청 옵션 (options)
+          signal: signal // ✅ [수정] 명시적으로 signal을 전달합니다.
+        }
+      ),
+      // 2. 삽화 프롬프트 생성 (동일하게 signal 추가)
       imagePromptGenerationPromise
     ]);
 
     const story = storyResponse.choices[0]?.message?.content?.trim() || "동화 생성에 실패했습니다.";
     const imagePrompt = imagePromptResponse.choices[0]?.message?.content?.trim() || "A beautiful and heartwarming fairy tale scene";
 
+    // ✅ [추가] 동화 생성이 실패했거나 비어있으면 여기서 중단합니다.
+    if (story === "동화 생성에 실패했습니다." || !story) throw new Error("동화 텍스트 생성 실패");
+
     console.log("[API] 동화 내용 및 삽화 프롬프트 생성 성공! 이제 DALL-E 이미지를 생성합니다...");
     console.log("🎨 DALL-E Image Generation Prompt:", imagePrompt);
 
     // 3. 생성된 프롬프트로 DALL-E 이미지 생성 (상단에서 초기화된 dalleClient 사용)
-    const imageResponse = await dalleClient.images.generate({
-      model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE, // .env 파일에 설정된 DALL-E 배포 이름 (예: dall-e-3)
-      prompt: imagePrompt,
-      n: 1,
-      size: "1792x1024", // DALL-E 3에서 지원하는 가로가 긴 비율
-      quality: "standard", // 또는 "hd"
-    });
+    let imageResponse;
+    try {
+      imageResponse = await dalleClient.images.generate(
+        { // 1. 요청 본문 (body)
+          model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
+          prompt: imagePrompt,
+          n: 1,
+          size: "1792x1024",
+          quality: "standard",
+        },
+        { signal: signal } // 2. 요청 옵션 (options)
+      );
+    } catch (error) {
+      // ✅ [추가] 콘텐츠 정책 위반 오류 발생 시, 안전한 대체 프롬프트로 재시도합니다.
+      if (error.code === 'content_policy_violation') {
+        console.warn(`[DALL-E] 프롬프트가 콘텐츠 정책에 위반되어 대체 프롬프트로 재시도합니다.`);
+        const safeImagePrompt = "A beautiful and safe illustration for a children's fairy tale, gentle and heartwarming style, simple background.";
+        imageResponse = await dalleClient.images.generate(
+          { model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE, prompt: safeImagePrompt, n: 1, size: "1792x1024", quality: "standard" },
+          { signal: signal }
+        );
+        console.log(`[DALL-E] 대체 프롬프트로 이미지 생성 성공`);
+      } else {
+        throw error; // 다른 종류의 오류는 그대로 전파하여 상위 catch 블록에서 처리합니다.
+      }
+    }
 
     const illustrationUrl = imageResponse.data[0].url;
     console.log("[API] DALL-E 이미지 생성 성공! URL:", illustrationUrl);
@@ -139,6 +181,13 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
 
   } catch (error) {
     console.error("❌ [오류] 동화 생성(Chat Completion) 실패:", error);
+
+    // ✅ [추가] 요청이 취소되어 발생한 에러는 클라이언트에 에러 응답을 보내지 않습니다.
+    if (error.name === 'AbortError') {
+      console.log('[API] 작업이 취소되어 응답을 보내지 않습니다.');
+      // res.status(499)를 보내지 않고 그냥 종료합니다. 클라이언트는 이미 에러를 알고 있습니다.
+      return;
+    }
 
     // ✅ [추가] 더 자세한 에러 정보 로깅
     if (error.code) console.error("에러 코드:", error.code);
@@ -178,7 +227,7 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
 // [POST] /api/stories/regenerate-prompt - 삽화 프롬프트만 재생성
 router.post("/regenerate-prompt", async (req, res) => {
   const { story, userData } = req.body; // story는 현재 사용되지 않지만, 확장성을 위해 유지합니다.
-  const { name, age, emotion, comment, referenceImageUrl } = userData; // ✅ [수정] age 추가
+  const { name, age, emotion, comment, referenceImageUrl, gender } = userData; // ✅ [수정] age 추가
 
   if (!story || !name || !emotion) {
     return res.status(400).json({ message: "동화 내용, 이름, 감정은 필수입니다." });
@@ -206,7 +255,7 @@ router.post("/regenerate-prompt", async (req, res) => {
           {
             role: "user",
             content: [
-              { type: "text", text: `Create a new, slightly different prompt based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old. Start your prompt with the age descriptor.` },
+              { type: "text", text: `Create a new, slightly different prompt based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` },
               {
                 type: "image_url",
                 image_url: { "url": referenceImageUrl, "detail": "low" }
@@ -223,7 +272,7 @@ router.post("/regenerate-prompt", async (req, res) => {
         model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
         messages: [
           { role: "system", content: imagePromptSystem },
-          { role: "user", content: `Create a new, slightly different prompt based on this user input:\n- Character Name: ${name}\n- Age: ${age} years old\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old. Start your prompt with the age descriptor.` }
+          { role: "user", content: `Create a new, slightly different prompt based on this user input:\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` }
         ],
         max_tokens: 200,
         temperature: 0.7,
@@ -333,7 +382,7 @@ router.post("/generate-video-scenes", (req, res, next) => {
 router.post("/generate-video-scenes", async (req, res) => {
   const { story, userData } = req.body;
   // ✅ [수정] userData에서 모든 관련 정보를 추출합니다.
-  const { name, age, emotion, comment, referenceImageUrl } = userData;
+  const { name, age, emotion, comment, referenceImageUrl, gender } = userData;
 
   if (!story || !name || !emotion || !age) {
     return res.status(400).json({ message: "동화 내용, 이름, 나이, 감정은 필수입니다." });
@@ -430,7 +479,7 @@ ${story}
             {
               role: "user",
               content: [
-                { type: "text", text: `Create a prompt for a scene illustration based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old. Start your prompt with the age descriptor.` },
+                { type: "text", text: `Create a prompt for a scene illustration based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` },
                 { type: "image_url", image_url: { "url": referenceImageUrl, "detail": "low" } }
               ]
             }
@@ -444,7 +493,7 @@ ${story}
           model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
           messages: [
             { role: "system", content: imagePromptSystem },
-            { role: "user", content: `Create a prompt for a scene illustration.\n- Character Name: ${name}\n- Age: ${age} years old\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old. Start your prompt with the age descriptor.` }
+            { role: "user", content: `Create a prompt for a scene illustration.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` }
           ],
           max_tokens: 200,
           temperature: 0.6,

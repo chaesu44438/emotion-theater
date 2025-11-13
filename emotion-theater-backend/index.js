@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path'); // ✅ [추가] 정적 파일 제공을 위한 path 모듈
 require('dotenv').config(); // .env 파일 로드
 const { initializeDatabase } = require('./db'); // ✅ db.js에서 초기화 함수 가져오기
 
@@ -60,20 +59,6 @@ app.use('/api/translate', authMiddleware, translationRouter);
 app.use('/api/video', (req, res, next) => {
   if (req.path.startsWith('/download/')) return videoRouter(req, res, next); // 다운로드 경로는 인증 미들웨어를 건너뛰고 바로 videoRouter로 연결합니다.
   return authMiddleware(req, res, () => videoRouter(req, res, next)); // 그 외 경로는 인증을 수행한 후 videoRouter로 연결합니다.
-});
-
-// ✅ [추가] 프론트엔드 정적 파일 제공 (배포용)
-// public 폴더의 정적 파일들을 제공합니다 (HTML, CSS, JS, 이미지 등)
-app.use(express.static(path.join(__dirname, 'public')));
-
-// ✅ [추가] SPA (Single Page Application) 지원
-// API 경로가 아닌 모든 요청은 index.html로 리다이렉트
-app.get('*', (req, res) => {
-  // API 경로는 제외
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({ message: 'API endpoint not found' });
-  }
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 

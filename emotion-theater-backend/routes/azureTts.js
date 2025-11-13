@@ -54,6 +54,42 @@ function getVoiceMap_ko(defaultVoicePref = "female") {
   };
 }
 
+// ✅ [추가] Chinese Voice Map
+function getVoiceMap_zh(defaultVoicePref = "female") {
+    const femaleNarrator = { name: "zh-CN-XiaoxiaoNeural", pitch: "0%", rate: "0%" };
+    const maleNarrator = { name: "zh-CN-YunjianNeural", pitch: "0%", rate: "0%" };
+    const femaleChild = { name: "zh-CN-XiaoyouNeural", pitch: "0%", rate: "0%" };
+
+    return {
+        narrator: defaultVoicePref === "male" ? maleNarrator : femaleNarrator,
+        child: defaultVoicePref === "male" ? { ...maleNarrator, pitch: "+10%" } : femaleChild,
+        mother: { ...femaleNarrator, pitch: "+5%" },
+        father: { ...maleNarrator, pitch: "-5%" },
+        grandmother: { ...femaleNarrator, pitch: "-5%", rate: "-5%" },
+        grandfather: { ...maleNarrator, pitch: "-10%", rate: "-10%" },
+        smallAnimal: { ...femaleChild, pitch: "+5%", rate: "0%" },
+        largeAnimal: { ...maleNarrator, pitch: "-15%" },
+    };
+}
+
+// ✅ [추가] Japanese Voice Map
+function getVoiceMap_ja(defaultVoicePref = "female") {
+    const femaleNarrator = { name: "ja-JP-NanamiNeural", pitch: "0%", rate: "0%" };
+    const maleNarrator = { name: "ja-JP-KeitaNeural", pitch: "0%", rate: "0%" };
+
+    return {
+        narrator: defaultVoicePref === "male" ? maleNarrator : femaleNarrator,
+        child: defaultVoicePref === "male" ? { ...maleNarrator, pitch: "+10%" } : { ...femaleNarrator, pitch: "+10%" },
+        mother: { ...femaleNarrator, pitch: "+5%" },
+        father: { ...maleNarrator, pitch: "-5%" },
+        grandmother: { ...femaleNarrator, pitch: "-5%", rate: "-5%" },
+        grandfather: { ...maleNarrator, pitch: "-10%", rate: "-10%" },
+        smallAnimal: defaultVoicePref === "male" ? { ...maleNarrator, pitch: "+15%" } : { ...femaleNarrator, pitch: "+15%" },
+        largeAnimal: { ...maleNarrator, pitch: "-15%" },
+    };
+}
+
+
 // ✅ [수정] 화자 이름으로 목소리 찾기 (언어 지원 추가)
 function getVoiceForSpeaker(speaker, language, defaultVoicePref = "female") {
   const s = speaker.toLowerCase().trim();
@@ -70,6 +106,24 @@ function getVoiceForSpeaker(speaker, language, defaultVoicePref = "female") {
     return VOICE_MAP.child; // Default to child
   }
 
+  if (language === 'zh') {
+    const VOICE_MAP = getVoiceMap_zh(defaultVoicePref);
+    // 중국어는 화자 이름 매칭이 복잡하므로, 우선 나레이터와 기본 목소리 위주로 단순하게 처리
+    if (s.includes('旁白') || s.includes('narrator')) return VOICE_MAP.narrator;
+    if (s.includes('妈妈') || s.includes('母亲')) return VOICE_MAP.mother;
+    if (s.includes('爸爸') || s.includes('父亲')) return VOICE_MAP.father;
+    return VOICE_MAP.child;
+  }
+
+  if (language === 'ja') {
+    const VOICE_MAP = getVoiceMap_ja(defaultVoicePref);
+    // 일본어도 화자 이름 매칭이 복잡하므로, 우선 나레이터와 기본 목소리 위주로 단순하게 처리
+    if (s.includes('ナレーター') || s.includes('narrator')) return VOICE_MAP.narrator;
+    if (s.includes('母') || s.includes('お母さん')) return VOICE_MAP.mother;
+    if (s.includes('父') || s.includes('お父さん')) return VOICE_MAP.father;
+    return VOICE_MAP.child;
+  }
+
   // Default to Korean
   const VOICE_MAP = getVoiceMap_ko(defaultVoicePref);
   if (s.includes('나레이터') || s.includes('narrator')) return VOICE_MAP.narrator;
@@ -84,7 +138,13 @@ function getVoiceForSpeaker(speaker, language, defaultVoicePref = "female") {
 
 // ✅ [수정] 대본 형식 텍스트를 SSML로 변환하는 함수 (언어 지원 추가)
 function convertTextToSSML(text, language = 'ko', defaultVoicePref = "female") {
-  const langCode = language === 'en' ? 'en-US' : 'ko-KR';
+  const langCodeMap = {
+    en: 'en-US',
+    ko: 'ko-KR',
+    zh: 'zh-CN',
+    ja: 'ja-JP',
+  };
+  const langCode = langCodeMap[language] || 'ko-KR';
   let ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="${langCode}">\n`;
 
   const lines = text.split('\n').filter(line => line.trim().length > 0);
@@ -101,12 +161,33 @@ function convertTextToSSML(text, language = 'ko', defaultVoicePref = "female") {
     let speaker, dialogue, voice;
 
     if (colonIndex === -1) {
-      speaker = language === 'en' ? 'Narrator' : '나레이터';
-      dialogue = trimmed;
+      const narratorNames = { en: 'Narrator', ko: '나레이터', zh: '旁白', ja: 'ナレーター' };
+      speaker = narratorNames[language] || '나레이터';
+      dialogue = trimmed; // Initial assumption: whole line is dialogue
+
+      // Explicitly check for common speaker prefixes and remove them if found
+      const speakerPrefixes = {
+        ko: ['나레이터', '엄마', '아빠', '할머니', '할아버지', '토끼', '다람쥐', '새', '병아리', '강아지', '고양이', '쥐', '새끼', '곰', '부엉이', '호랑이', '사자', '코끼리'],
+        en: ['Narrator', 'Mother', 'Father', 'Grandmother', 'Grandfather', 'Rabbit', 'Squirrel', 'Bird', 'Puppy', 'Kitten', 'Mouse', 'Cub', 'Bear', 'Owl', 'Tiger', 'Lion', 'Elephant'],
+        zh: ['旁白', '妈妈', '母亲', '爸爸', '父亲', '奶奶', '爷爷', '兔子', '松鼠', '鸟', '小狗', '小猫', '老鼠', '熊', '猫头鹰', '老虎', '狮子', '大象'], // Simplified Chinese
+        ja: ['ナレーター', '母', 'お母さん', '父', 'お父さん', 'おばあさん', 'おじいさん', 'うさぎ', 'リス', '鳥', '子犬', '子猫', 'ねずみ', 'クマ', 'フクロウ', 'トラ', 'ライオン', 'ゾウ'], // Japanese
+      };
+
+      const currentSpeakerPrefixes = speakerPrefixes[language] || [];
+      for (const prefix of currentSpeakerPrefixes) {
+        // Check if the line starts with "Prefix: " or "Prefix "
+        const regex = new RegExp(`^${prefix}(:|\\s)`, 'i'); // Case-insensitive
+        if (dialogue.match(regex)) {
+          dialogue = dialogue.replace(regex, '').trim();
+          speaker = prefix; // Update speaker to the matched prefix
+          break; // Found a speaker, no need to check further
+        }
+      }
+
       voice = getVoiceForSpeaker(speaker, language, defaultVoicePref);
     } else {
       speaker = trimmed.substring(0, colonIndex).trim();
-      dialogue = trimmed.substring(colonIndex + 1).trim();
+      dialogue = trimmed.substring(colonIndex + 1).trim(); // Here, dialogue is after colon
       if (!dialogue) continue;
       voice = getVoiceForSpeaker(speaker, language, defaultVoicePref);
     }

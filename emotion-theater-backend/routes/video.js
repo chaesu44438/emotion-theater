@@ -6,43 +6,17 @@ const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ [수정] 환경에 따라 ffmpeg 경로 설정
-// Windows 로컬 환경: 프로젝트 내부의 ffmpeg.exe 사용
-// Azure Linux 환경: 프로젝트 내부의 ffmpeg (Linux 바이너리) 사용
-const isWindows = process.platform === 'win32';
-
-if (isWindows) {
-  // Windows 로컬 개발 환경
-  const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
-  const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe.exe');
-
-  if (fs.existsSync(ffmpegPath)) {
-    ffmpeg.setFfmpegPath(ffmpegPath);
-    ffmpeg.setFfprobePath(ffprobePath);
-    console.log('[Video] Windows 환경: 로컬 ffmpeg.exe 사용');
-  } else {
-    console.log('[Video] ⚠️ Windows용 ffmpeg.exe를 찾을 수 없습니다.');
-  }
-} else {
-  // Linux/Azure 환경: bin 폴더의 Linux 바이너리 사용
-  const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg');
-  const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe');
-
-  if (fs.existsSync(ffmpegPath)) {
-    ffmpeg.setFfmpegPath(ffmpegPath);
-    ffmpeg.setFfprobePath(ffprobePath);
-    console.log('[Video] Linux 환경: 프로젝트 내 ffmpeg 바이너리 사용');
-    console.log(`[Video] ffmpeg 경로: ${ffmpegPath}`);
-  } else {
-    console.log('[Video] ⚠️ Linux용 ffmpeg 바이너리를 찾을 수 없습니다. 시스템 ffmpeg 사용 시도...');
-  }
-}
-
+// ✅ [수정] 프로젝트 내부에 포함된 ffmpeg 실행 파일 경로를 직접 지정합니다.
+// 이렇게 하면 시스템에 ffmpeg가 설치되어 있지 않아도 동작합니다.
+const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
+const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe.exe');
 const {
   storiesContainer,
   settingsContainer,
   DEFAULT_IMAGE_PROMPT_SYSTEM,
 } = require("../db");
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
 
 // ✅ [수정] 텍스트 생성용(GPT) OpenAI 클라이언트 초기화
 const textClient = new AzureOpenAI({
@@ -245,89 +219,43 @@ async function generateSceneTTS(text, characterName, voicePref) {
 // ✅ [수정] 오디오 길이에 맞춰 동영상을 생성합니다 (duration 파라미터 제거)
 function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
   return new Promise((resolve, reject) => {
-    console.log(`[FFMPEG] 시작 - 입력: ${path.basename(imagePath)}, ${path.basename(audioPath)}`);
-    console.log(`[FFMPEG] 출력: ${path.basename(outputPath)}`);
-
-    const command = ffmpeg()
+    ffmpeg()
       .input(imagePath)
-      .inputOptions(['-loop 1'])
+      .inputOptions('-noautorotate') // ✅ [재확인] 이미지의 자동 회전을 방지합니다.
+      .loop() // 이미지를 무한 반복 (-shortest 옵션이 오디오 길이에 맞춰 자름)
       .input(audioPath)
       .outputOptions([
         "-c:v libx264",
-        "-preset ultrafast",  // 빠른 인코딩
-        "-crf 28",  // 낮은 품질로 빠르게
+        "-tune stillimage",
         "-c:a aac",
-        "-b:a 128k",  // 오디오 비트레이트 낮춤
+        "-b:a 192k",
         "-pix_fmt yuv420p",
-        "-shortest",
-        "-t 60"  // 최대 60초로 제한
+        "-shortest", // 오디오 길이에 맞춰 동영상 생성
       ])
       .output(outputPath)
-      .on("start", (commandLine) => {
-        console.log(`[FFMPEG] 명령어: ${commandLine}`);
-      })
-      .on("progress", (progress) => {
-        if (progress.percent) {
-          console.log(`[FFMPEG] 진행: ${progress.percent.toFixed(1)}%`);
-        }
-      })
-      .on("stderr", (stderrLine) => {
-        // ffmpeg의 상세 출력 (너무 많으면 필터링)
-        if (stderrLine.includes('error') || stderrLine.includes('Error')) {
-          console.log(`[FFMPEG] stderr: ${stderrLine}`);
-        }
-      })
-      .on("end", () => {
-        console.log(`[FFMPEG] 완료: ${path.basename(outputPath)}`);
-        resolve();
-      })
-      .on("error", (err, stdout, stderr) => {
-        console.error(`[FFMPEG] 오류 발생!`);
-        console.error(`[FFMPEG] 오류 메시지: ${err.message}`);
-        if (stderr) console.error(`[FFMPEG] stderr: ${stderr.substring(0, 500)}`);
-        reject(err);
-      });
-
-    command.run();
+      .on("end", () => resolve())
+      .on("error", (err) => reject(err))
+      .run();
   });
 }
 
 // 여러 동영상을 하나로 결합
 function concatenateVideos(videoPaths, outputPath) {
   return new Promise((resolve, reject) => {
-    console.log(`[FFMPEG-CONCAT] ${videoPaths.length}개 동영상 병합 시작`);
     const listFile = path.join(TEMP_DIR, `concat_${Date.now()}.txt`);
     const listContent = videoPaths.map((p) => `file '${p}'`).join("\n");
     fs.writeFileSync(listFile, listContent);
-    console.log(`[FFMPEG-CONCAT] 병합 목록 파일: ${listFile}`);
 
     ffmpeg()
       .input(listFile)
       .inputOptions(["-f concat", "-safe 0"])
       .outputOptions(["-c copy"])
       .output(outputPath)
-      .on("start", (commandLine) => {
-        console.log(`[FFMPEG-CONCAT] 명령어: ${commandLine}`);
-      })
-      .on("progress", (progress) => {
-        if (progress.percent) {
-          console.log(`[FFMPEG-CONCAT] 진행: ${progress.percent.toFixed(1)}%`);
-        }
-      })
-      .on("stderr", (stderrLine) => {
-        if (stderrLine.includes('error') || stderrLine.includes('Error')) {
-          console.log(`[FFMPEG-CONCAT] stderr: ${stderrLine}`);
-        }
-      })
       .on("end", () => {
-        console.log(`[FFMPEG-CONCAT] 병합 완료: ${path.basename(outputPath)}`);
         fs.unlinkSync(listFile);
         resolve();
       })
-      .on("error", (err, stdout, stderr) => {
-        console.error(`[FFMPEG-CONCAT] 오류 발생!`);
-        console.error(`[FFMPEG-CONCAT] 오류 메시지: ${err.message}`);
-        if (stderr) console.error(`[FFMPEG-CONCAT] stderr: ${stderr.substring(0, 500)}`);
+      .on("error", (err) => {
         if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
         reject(err);
       })

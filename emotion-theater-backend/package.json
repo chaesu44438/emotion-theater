@@ -4,8 +4,7 @@
   "description": "Backend for Emotion Theater",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "node scripts/install-ffmpeg.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "@azure/cosmos": "^4.2.1",

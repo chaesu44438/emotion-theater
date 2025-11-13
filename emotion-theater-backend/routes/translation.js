@@ -16,11 +16,19 @@ router.post('/translate', async (req, res) => {
         return res.status(400).json({ error: 'Text for translation is required.' });
     }
 
-    const systemPrompt = `You are a helpful assistant that translates text. Translate the user's text to ${to === 'en' ? 'English' : 'Korean'}. Respond only with the translated text, without any additional explanations or conversational text.`;
+    const languageMap = {
+        en: 'English',
+        ko: 'Korean',
+        zh: 'Chinese',
+        ja: 'Japanese',
+    };
+    const targetLanguage = languageMap[to] || 'English'; // Default to English
+
+    const systemPrompt = `You are a helpful assistant that translates text. Translate the user's text to ${targetLanguage}. Respond only with the translated text, without any additional explanations or conversational text.`;
     const userPrompt = text;
 
     try {
-        console.log(`[Translate] Translating text to ${to} using Azure OpenAI...`);
+        console.log(`[Translate] Translating text to ${to} (${targetLanguage}) using Azure OpenAI...`);
 
         const response = await textClient.chat.completions.create({
             model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,

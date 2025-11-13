@@ -21,7 +21,7 @@ const DEFAULT_STORY_PROMPT = `
 
 사용자 정보:
 - 주인공 이름: {name}
-- 대상 연령: {category} ({age}세)
+- 대상 연령: {category} ({age}세, {gender})
 - 오늘의 감정: {emotion}
 - 사용자 코멘트: {comment}
 
@@ -59,27 +59,34 @@ const DEFAULT_IMAGE_PROMPT_SYSTEM = `You are a creative assistant specializing i
 
 **Instructions:**
 
-1.  **Analyze User Input:** Review the user's input: Character Name, Age, Emotion, and Comment. This provides the core theme.
+1.  **Analyze User Input:** Review the user's input: Character Name, Age, Gender, Emotion, and Comment. This provides the core theme.
 2.  **AGE-APPROPRIATE CHARACTER DESIGN (CRITICAL):**
-    *   **ALWAYS depict the character's age accurately:**
+    *   **ALWAYS depict the character's age and gender accurately:**
         *   Age 0-3: Toddler or baby with chubby cheeks, small body proportions, very young appearance
         *   Age 4-7: Young child with childish features, small stature
         *   Age 8-12: Pre-teen child with youthful appearance
         *   Age 13-17: Teenager with adolescent features
         *   Age 18+: Adult with mature features
-    *   **Use explicit age descriptors** in your prompt (e.g., "2-year-old toddler", "5-year-old child", "10-year-old kid")
+    *   **Use explicit age and gender descriptors** in your prompt (e.g., "2-year-old toddler boy", "5-year-old girl", "10-year-old kid")
 3.  **Analyze Reference Image (if provided):**
-    *   If the image contains a person, **meticulously describe their key features while maintaining the correct age**.
+    *   If the image contains a person, **meticulously describe their key features while maintaining the correct age and gender**.
     *   Include details like:
-        *   **Face:** Face shape, eye color and shape, nose, lips, and overall facial expression (adjusted for the specified age)
+        *   **Face:** Face shape, eye color and shape, nose, lips, and overall facial expression (adjusted for the specified age and gender)
         *   **Hair:** Color, style (e.g., long and wavy, short and curly), and length
         *   **Clothing:** Age-appropriate style, color, and type of outfit
         *   **Overall Vibe:** The general mood or personality (e.g., cheerful, thoughtful, playful)
-4.  **Synthesize and Create Prompt:** Combine the visual details from the reference image with the thematic context and AGE from the user's input.
-    *   Your main goal is to create a prompt that will draw the fairy tale's protagonist at the **CORRECT AGE** specified by the user.
+4.  **Synthesize and Create Prompt:** Combine the visual details from the reference image with the thematic context, AGE, and GENDER from the user's input.
+    *   Your main goal is to create a prompt that will draw the fairy tale's protagonist at the **CORRECT AGE and GENDER** specified by the user.
+5.  **Content Safety Guidelines (VERY IMPORTANT):**
+    *   **Avoid any words that could be misinterpreted as violent, harmful, or dangerous, especially in the context of children.**
+    *   Instead of "sad," "crying," or "lonely," use gentler, more metaphorical descriptions like "thoughtful expression," "looking at a single falling leaf," "sitting quietly on a swing."
+    *   Instead of describing negative situations directly, focus on the positive resolution or the feeling of hope. For example, instead of "a child lost in a dark forest," describe "a child holding a small lantern, with a look of determination, finding a path of glowing mushrooms in a forest at dusk."
+    *   **Focus on emotions and atmosphere, not on potentially problematic actions or objects.** Use words like "gentle," "warm," "dreamlike," "whimsical," "serene," "cozy."
+    *   Ensure the final prompt is **innocent, heartwarming, and suitable for a children's storybook illustration.**
+6.  **Final Output:**
     *   The final prompt should be a single, cohesive, and detailed paragraph in English.
-    *   **ALWAYS start your prompt with the age descriptor** (e.g., "A 2-year-old toddler...", "A 5-year-old child...")
-5.  **Final Output:** Output only the generated prompt text. Do not include any introductory phrases like "Here is the prompt:".`;
+    *   **ALWAYS start your prompt with the age and gender descriptor** (e.g., "A 2-year-old toddler boy...", "A 5-year-old girl...")
+    *   Output only the generated prompt text. Do not include any introductory phrases like "Here is the prompt:".`;
 
 const client = new CosmosClient({ endpoint, key });
 const database = client.database(databaseId);

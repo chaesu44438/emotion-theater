@@ -21,6 +21,13 @@
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
 
+    // ✅ [추가] 외부에서 취소 신호(signal)가 전달되면, 내부 AbortController도 함께 취소시킵니다.
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => {
+        controller.abort();
+      });
+    }
+
     try {
       const res = await fetch(`${API_BASE_URL}${path}`, {
         ...options,
@@ -48,6 +55,10 @@
     } catch (error) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
+        // ✅ [추가] 외부 신호에 의해 취소된 경우, 사용자 정의 에러 메시지를 던집니다.
+        if (options.signal && options.signal.aborted) {
+          throw new Error('요청이 사용자에 의해 취소되었습니다.');
+        }
         throw new Error('요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.');
       }
       throw error;
@@ -60,6 +71,13 @@
     const timeout = options.timeout || 120000; // 120초 = 2분
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    // ✅ [추가] 외부에서 취소 신호(signal)가 전달되면, 내부 AbortController도 함께 취소시킵니다.
+    if (options.signal) {
+      options.signal.addEventListener('abort', () => {
+        controller.abort();
+      });
+    }
 
     try {
       const res = await fetch(`${API_BASE_URL}${path}`, {
@@ -83,6 +101,10 @@
     } catch (error) {
       clearTimeout(timeoutId);
       if (error.name === 'AbortError') {
+        // ✅ [추가] 외부 신호에 의해 취소된 경우, 사용자 정의 에러 메시지를 던집니다.
+        if (options.signal && options.signal.aborted) {
+          throw new Error('요청이 사용자에 의해 취소되었습니다.');
+        }
         throw new Error('요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.');
       }
       throw error;
@@ -179,10 +201,11 @@
      * 2. 생성된 동화로 이미지 프롬프트를 만듭니다.
      * 3. Pollinations.ai로 삽화를 생성합니다.
      */
-    async generateStory(userData) {
+    async generateStory(userData, signal) { // ✅ [수정] signal 파라미터 추가
       // ✅ [수정] 백엔드가 동화 텍스트와 DALL-E 이미지 URL을 모두 생성하여 반환합니다.
       // 프론트엔드에서는 Pollinations.ai URL을 만들 필요가 없습니다.
       return fetchAPI("/stories/generate", {
+        signal, // ✅ [수정] fetchAPI에 signal 전달
         method: "POST",
         body: JSON.stringify(userData),
       });
