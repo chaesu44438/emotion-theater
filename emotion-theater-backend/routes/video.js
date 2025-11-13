@@ -6,17 +6,29 @@ const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ [수정] 프로젝트 내부에 포함된 ffmpeg 실행 파일 경로를 직접 지정합니다.
-// 이렇게 하면 시스템에 ffmpeg가 설치되어 있지 않아도 동작합니다.
-const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
-const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe.exe');
+// ✅ [수정] 환경에 따라 ffmpeg 경로 설정
+// Windows 로컬 환경: 프로젝트 내부의 ffmpeg.exe 사용
+// Azure Linux 환경: 시스템에 설치된 ffmpeg 사용
+const isWindows = process.platform === 'win32';
+const isAzure = process.env.WEBSITE_INSTANCE_ID !== undefined; // Azure 환경 감지
+
+if (isWindows && !isAzure) {
+  // Windows 로컬 개발 환경
+  const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
+  const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe.exe');
+  ffmpeg.setFfmpegPath(ffmpegPath);
+  ffmpeg.setFfprobePath(ffprobePath);
+  console.log('[Video] Windows 환경: 로컬 ffmpeg.exe 사용');
+} else {
+  // Azure Linux 환경 또는 기타 Unix 환경: 시스템 ffmpeg 사용
+  console.log('[Video] Linux/Azure 환경: 시스템 ffmpeg 사용');
+}
+
 const {
   storiesContainer,
   settingsContainer,
   DEFAULT_IMAGE_PROMPT_SYSTEM,
 } = require("../db");
-ffmpeg.setFfmpegPath(ffmpegPath);
-ffmpeg.setFfprobePath(ffprobePath);
 
 // ✅ [수정] 텍스트 생성용(GPT) OpenAI 클라이언트 초기화
 const textClient = new AzureOpenAI({
