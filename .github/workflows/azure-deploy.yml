@@ -30,21 +30,23 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
 
-    # 3. 백엔드 의존성 설치
+    # 3. 백엔드 의존성 설치 (프로덕션 전용)
     - name: 📦 Install backend dependencies
       working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
       run: |
-        npm ci
+        npm ci --production
+        echo "Dependencies installed successfully"
+        ls -la node_modules | head -20
 
     # 4. 배포 준비 (불필요한 파일 제거)
     - name: 🧹 Clean up
       working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
       run: |
-        echo "Removing dev dependencies and temporary files..."
+        echo "Removing temporary files..."
         rm -rf temp/
         rm -rf test/
         rm -rf bin/
-        echo "Cleanup completed. ffmpeg will be installed on Azure during deployment."
+        echo "Cleanup completed. node_modules included, ffmpeg will be installed during first start."
 
     # 5. Azure App Service에 배포
     - name: 🚀 Deploy to Azure Web App
