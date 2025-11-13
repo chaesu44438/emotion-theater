@@ -250,16 +250,17 @@ function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
 
     const command = ffmpeg()
       .input(imagePath)
-      .inputOptions('-noautorotate')
-      .loop()
+      .inputOptions(['-loop 1'])
       .input(audioPath)
       .outputOptions([
         "-c:v libx264",
-        "-tune stillimage",
+        "-preset ultrafast",  // 빠른 인코딩
+        "-crf 28",  // 낮은 품질로 빠르게
         "-c:a aac",
-        "-b:a 192k",
+        "-b:a 128k",  // 오디오 비트레이트 낮춤
         "-pix_fmt yuv420p",
         "-shortest",
+        "-t 60"  // 최대 60초로 제한
       ])
       .output(outputPath)
       .on("start", (commandLine) => {
