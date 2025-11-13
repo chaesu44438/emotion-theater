@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path'); // ✅ 정적 파일 제공을 위한 path 모듈
 require('dotenv').config(); // .env 파일 로드
 const { initializeDatabase } = require('./db'); // ✅ db.js에서 초기화 함수 가져오기
 
@@ -61,6 +62,16 @@ app.use('/api/video', (req, res, next) => {
   return authMiddleware(req, res, () => videoRouter(req, res, next)); // 그 외 경로는 인증을 수행한 후 videoRouter로 연결합니다.
 });
 
+// ✅ 프론트엔드 정적 파일 제공 (배포용)
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ✅ SPA 라우팅 지원: API가 아닌 모든 경로는 index.html로 보냅니다.
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ message: 'API endpoint not found' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // ✅ [수정] 데이터베이스 초기화가 완료된 후 서버를 시작합니다.
 initializeDatabase()
