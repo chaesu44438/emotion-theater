@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(node index.js:*)",
+      "Bash(dir:*)",
+      "Bash(node test-openai.js:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout:*)",
+      "Bash(npm install:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(tasklist:*)",
+      "Bash(npm start)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

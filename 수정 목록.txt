@@ -1,0 +1,132 @@
+
+===================================================
+libs/apiService.js
+===================================================
+
+      return fetchAPI(`/admin/users/${userId}`, {
+        method: "DELETE",
+      });
+    },
+
+    // ✅ [추가] 프롬프트 조회 API
+    async getPrompts() {
+      return fetchAPI("/admin/prompts");
+    },
+
+    // ✅ [추가] 프롬프트 업데이트 API
+    async updatePrompts(storyPrompt, imagePromptSystem) {
+      return fetchAPI("/admin/prompts", {
+        method: "PUT",
+        body: JSON.stringify({ storyPrompt, imagePromptSystem }),
+      });
+    },
+
+    // --- 동화 API ---
+    async getStories() {
+
+
+
+===================================================
+components/EmotionTheater.js
+===================================================
+
+  const [prompts, setPrompts] = useState({ storyPrompt: '', imagePromptSystem: '' });
+  const [isSavingPrompts, setIsSavingPrompts] = useState(false);
+  const [promptSaveStatus, setPromptSaveStatus] = useState(''); // 'success' | 'error' | ''
+  // ✅ [추가] 관리자 페이지 뷰 상태 ('users' | 'prompts')
+  const [adminView, setAdminView] = useState('users');
+
+
+
+              <p className="text-red-500 text-sm text-center mb-3">{adminError}</p>
+            )}
+
+            {/* ✅ [추가] 관리 페이지 선택 탭 */}
+            <div className="flex border-b border-gray-300 mb-4">
+              <button
+                onClick={() => setAdminView('users')}
+                className={`px-4 py-2 text-lg font-semibold transition-colors ${adminView === 'users' ? 'border-b-2 border-yellow-500 text-gray-900' : 'text-gray-500 hover:bg-gray-100 rounded-t-md'}`}
+              >
+                사용자 관리
+              </button>
+              <button
+                onClick={() => setAdminView('prompts')}
+                className={`px-4 py-2 text-lg font-semibold transition-colors ${adminView === 'prompts' ? 'border-b-2 border-yellow-500 text-gray-900' : 'text-gray-500 hover:bg-gray-100 rounded-t-md'}`}
+              >
+                프롬프트 관리
+              </button>
+            </div>
+
+            {/* ✅ [수정] 'users' 뷰일 때만 사용자 관리 섹션 표시 */}
+            {adminView === 'users' && (
+              <div>
+                <h3 className="text-xl font-semibold mb-2">사용자 목록</h3>
+                <div className="max-h-96 overflow-y-auto bg-white rounded-2xl border border-gray-200">
+                  <ul className="divide-y divide-gray-200">
+                    {userList.map((user) => (
+                      <li key={user.id} className="p-4 flex items-center gap-3">
+                        <div className="flex-1">
+                          <div className="font-bold text-gray-900">
+                            {user.username}
+                            {user.role === 'admin' && <span className="ml-2 text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Admin</span>}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            가입일: {new Date(user.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+                        {user.role !== 'admin' && (
+                          <button
+                            onClick={() => handleDeleteUser(user.id, user.username)}
+                            className="px-3 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 text-sm"
+                          >
+                            삭제
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* ✅ [수정] 'prompts' 뷰일 때만 프롬프트 관리 섹션 표시 */}
+            {adminView === 'prompts' && (
+              <div>
+                <h3 className="text-xl font-semibold mb-2">프롬프트 수정</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label htmlFor="storyPrompt" className="block text-sm font-medium text-gray-700 mb-1">동화 생성 프롬프트</label>
+                    <textarea id="storyPrompt" rows="8" value={prompts.storyPrompt} onChange={(e) => setPrompts(p => ({ ...p, storyPrompt: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"></textarea>
+                  </div>
+                  <div>
+                    <label htmlFor="imagePromptSystem" className="block text-sm font-medium text-gray-700 mb-1">삽화 생성 프롬프트 (System Role)</label>
+                    <textarea id="imagePromptSystem" rows="8" value={prompts.imagePromptSystem} onChange={(e) => setPrompts(p => ({ ...p, imagePromptSystem: e.target.value }))} className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-yellow-500 focus:border-yellow-500"></textarea>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-end gap-4">
+                  {promptSaveStatus === 'success' && <span className="text-sm text-green-600">성공적으로 저장되었습니다!</span>}
+                  {promptSaveStatus === 'error' && <span className="text-sm text-red-600">저장에 실패했습니다.</span>}
+                  <button
+                    onClick={handleSavePrompts}
+                    disabled={isSavingPrompts}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 disabled:bg-blue-300 transition-all text-sm"
+                  >
+                    {isSavingPrompts ? '저장 중...' : '프롬프트 저장'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+
+      </div>
+    </div>
+  );
+}
+
+window.EmotionTheater = EmotionTheater;
+
+
+
+

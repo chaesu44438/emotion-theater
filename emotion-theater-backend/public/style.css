@@ -1,0 +1,68 @@
+/* 필요 시 커스텀 스타일을 여기에 추가하세요 */
+html, body {
+    height: 100%;
+  }
+  
+  /* 스크롤 영역 살짝 부드럽게 */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+
+  .paper-texture::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: .06; /* 더 진하게 하고 싶으면 0.08~0.12 */
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  input:focus { outline: none; }
+
+  /* 커튼 안쪽 그림자 효과 */
+  .curtain-shadow-left { box-shadow: inset -12px 0 24px rgba(0,0,0,0.35); }
+  .curtain-shadow-right { box-shadow: inset 12px 0 24px rgba(0,0,0,0.35); }
+
+
+  .velvet-texture {
+    background-image: 
+      linear-gradient(to right, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 10%, rgba(0,0,0,0) 90%, rgba(0,0,0,0.2) 100%),
+      linear-gradient(to right, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 20%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.1) 100%);
+    background-size: 100% 100%;
+  }
+
+  .title-handwritten {
+    font-family: 'Gaegu', cursive;
+    color: #4B382B;
+    font-weight: 700; /* bold */
+  }
+
+        .golden-title {
+          color: #D9A746;
+          text-shadow:
+            0 0 3px #F3EADF,
+            0 0 6px #FDFBF8,
+            0 0 10px #F3EADF;
+          animation: golden-glow 2.5s ease-in-out infinite alternate;
+        }
+
+        @keyframes golden-glow {
+          from {
+            text-shadow:
+              0 0 3px #F3EADF,
+              0 0 6px #FDFBF8,
+              0 0 10px #F3EADF;
+          }
+          to {
+            text-shadow:
+              0 0 5px #FDFBF8,
+              0 0 10px #F3EADF,
+              0 0 15px #FDFBF8;
+          }
+        }
+  
+   .speaking-cursor {
+-   cursor: url('lip1.gif'), auto;
++   cursor: none;    
+  }     

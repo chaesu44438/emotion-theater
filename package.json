@@ -1,0 +1,17 @@
+{
+  "name": "emotion-theater-monorepo",
+  "version": "1.0.0",
+  "description": "Frontend and Backend for Emotion Theater",
+  "private": true,
+  "scripts": {
+    "backend": "npm start --prefix emotion-theater-backend",
+    "frontend:serve": "live-server . --port=5500 --proxy=/api:http://localhost:4000/api --open --ignore=emotion-theater-backend",
+    "frontend": "wait-on http://localhost:4000/api/auth/health -t 60000 && npm run frontend:serve",
+    "dev": "concurrently --kill-others-on-fail \"npm:backend\" \"npm:frontend\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "live-server": "^1.2.2",
+    "wait-on": "^7.2.0"
+  }
+}

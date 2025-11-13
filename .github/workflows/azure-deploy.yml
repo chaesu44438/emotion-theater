@@ -1,0 +1,59 @@
+# GitHub Actions workflow for deploying to Azure App Service
+name: Deploy to Azure App Service
+
+# 트리거 조건: main 브랜치에 push되거나 수동으로 실행할 때
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # 수동 실행 가능
+
+# 환경 변수
+env:
+  AZURE_WEBAPP_NAME: 'emotion-theater'  # Azure App Service 이름 (변경 필요)
+  AZURE_WEBAPP_PACKAGE_PATH: 'emotion-theater-backend'  # 배포할 폴더
+  NODE_VERSION: '18.x'  # Node.js 버전
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    name: Build and Deploy
+
+    steps:
+    # 1. 코드 체크아웃
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    # 2. Node.js 설정
+    - name: 🔧 Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    # 3. 백엔드 의존성 설치
+    - name: 📦 Install backend dependencies
+      working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+      run: |
+        npm ci
+
+    # 4. 배포 준비 (불필요한 파일 제거)
+    - name: 🧹 Clean up
+      working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+      run: |
+        echo "Removing dev dependencies and temporary files..."
+        rm -rf temp/
+        rm -rf test/
+
+    # 5. Azure App Service에 배포
+    - name: 🚀 Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+
+    # 6. 배포 완료 알림
+    - name: ✅ Deployment completed
+      run: |
+        echo "🎉 Deployment to Azure completed successfully!"
+        echo "🌐 App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
