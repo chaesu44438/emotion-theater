@@ -6,10 +6,11 @@ const ffmpeg = require("fluent-ffmpeg");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ [수정] 프로젝트 내부에 포함된 ffmpeg 실행 파일 경로를 직접 지정합니다.
-// 이렇게 하면 시스템에 ffmpeg가 설치되어 있지 않아도 동작합니다.
-const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
-const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe.exe');
+// ✅ [수정] 플랫폼에 맞는 ffmpeg 경로를 동적으로 설정합니다.
+// Windows: ffmpeg.exe / Linux(Azure): ffmpeg
+const isWindows = process.platform === 'win32';
+const ffmpegPath = path.join(__dirname, '..', 'bin', isWindows ? 'ffmpeg.exe' : 'ffmpeg');
+const ffprobePath = path.join(__dirname, '..', 'bin', isWindows ? 'ffprobe.exe' : 'ffprobe');
 const {
   storiesContainer,
   settingsContainer,
