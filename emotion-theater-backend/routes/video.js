@@ -11,6 +11,19 @@ const path = require("path");
 const isWindows = process.platform === 'win32';
 const ffmpegPath = path.join(__dirname, '..', 'bin', isWindows ? 'ffmpeg.exe' : 'ffmpeg');
 const ffprobePath = path.join(__dirname, '..', 'bin', isWindows ? 'ffprobe.exe' : 'ffprobe');
+
+// ✅ [추가] ffmpeg 경로 확인 및 로그 출력
+console.log('========================================');
+console.log('[VIDEO] ffmpeg 설정 확인');
+console.log('========================================');
+console.log(`플랫폼: ${process.platform}`);
+console.log(`isWindows: ${isWindows}`);
+console.log(`ffmpeg 경로: ${ffmpegPath}`);
+console.log(`ffprobe 경로: ${ffprobePath}`);
+console.log(`ffmpeg 파일 존재: ${fs.existsSync(ffmpegPath)}`);
+console.log(`ffprobe 파일 존재: ${fs.existsSync(ffprobePath)}`);
+console.log('========================================');
+
 const {
   storiesContainer,
   settingsContainer,
@@ -220,6 +233,20 @@ async function generateSceneTTS(text, characterName, voicePref) {
 // ✅ [수정] 오디오 길이에 맞춰 동영상을 생성합니다 (duration 파라미터 제거)
 function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
   return new Promise((resolve, reject) => {
+    console.log(`[FFMPEG] 비디오 생성 시작`);
+    console.log(`[FFMPEG] 이미지: ${imagePath}`);
+    console.log(`[FFMPEG] 오디오: ${audioPath}`);
+    console.log(`[FFMPEG] 출력: ${outputPath}`);
+    console.log(`[FFMPEG] ffmpeg 경로: ${ffmpegPath}`);
+    console.log(`[FFMPEG] ffprobe 경로: ${ffprobePath}`);
+
+    // ✅ [추가] 120초(2분) 타임아웃 설정
+    const timeoutMs = 120000;
+    const timeoutId = setTimeout(() => {
+      console.error(`[FFMPEG] 타임아웃 (${timeoutMs}ms 초과)`);
+      reject(new Error('ffmpeg timeout'));
+    }, timeoutMs);
+
     ffmpeg()
       .input(imagePath)
       .inputOptions('-noautorotate') // ✅ [재확인] 이미지의 자동 회전을 방지합니다.
@@ -234,8 +261,24 @@ function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
         "-shortest", // 오디오 길이에 맞춰 동영상 생성
       ])
       .output(outputPath)
-      .on("end", () => resolve())
-      .on("error", (err) => reject(err))
+      .on("start", (commandLine) => {
+        console.log(`[FFMPEG] 명령어 실행: ${commandLine}`);
+      })
+      .on("progress", (progress) => {
+        console.log(`[FFMPEG] 진행 중: ${JSON.stringify(progress)}`);
+      })
+      .on("end", () => {
+        clearTimeout(timeoutId);
+        console.log(`[FFMPEG] 비디오 생성 완료: ${outputPath}`);
+        resolve();
+      })
+      .on("error", (err, stdout, stderr) => {
+        clearTimeout(timeoutId);
+        console.error(`[FFMPEG] 오류 발생:`, err.message);
+        console.error(`[FFMPEG] stdout:`, stdout);
+        console.error(`[FFMPEG] stderr:`, stderr);
+        reject(err);
+      })
       .run();
   });
 }
@@ -243,20 +286,44 @@ function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
 // 여러 동영상을 하나로 결합
 function concatenateVideos(videoPaths, outputPath) {
   return new Promise((resolve, reject) => {
+    console.log(`[FFMPEG] 동영상 결합 시작`);
+    console.log(`[FFMPEG] ${videoPaths.length}개 동영상 결합`);
+
     const listFile = path.join(TEMP_DIR, `concat_${Date.now()}.txt`);
     const listContent = videoPaths.map((p) => `file '${p}'`).join("\n");
     fs.writeFileSync(listFile, listContent);
+    console.log(`[FFMPEG] 결합 목록 파일 생성: ${listFile}`);
+
+    // ✅ [추가] 180초(3분) 타임아웃 설정
+    const timeoutMs = 180000;
+    const timeoutId = setTimeout(() => {
+      console.error(`[FFMPEG] 결합 타임아웃 (${timeoutMs}ms 초과)`);
+      if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
+      reject(new Error('ffmpeg concatenate timeout'));
+    }, timeoutMs);
 
     ffmpeg()
       .input(listFile)
       .inputOptions(["-f concat", "-safe 0"])
       .outputOptions(["-c copy"])
       .output(outputPath)
+      .on("start", (commandLine) => {
+        console.log(`[FFMPEG] 결합 명령어 실행: ${commandLine}`);
+      })
+      .on("progress", (progress) => {
+        console.log(`[FFMPEG] 결합 진행 중: ${JSON.stringify(progress)}`);
+      })
       .on("end", () => {
+        clearTimeout(timeoutId);
+        console.log(`[FFMPEG] 동영상 결합 완료: ${outputPath}`);
         fs.unlinkSync(listFile);
         resolve();
       })
-      .on("error", (err) => {
+      .on("error", (err, stdout, stderr) => {
+        clearTimeout(timeoutId);
+        console.error(`[FFMPEG] 결합 오류 발생:`, err.message);
+        console.error(`[FFMPEG] stdout:`, stdout);
+        console.error(`[FFMPEG] stderr:`, stderr);
         if (fs.existsSync(listFile)) fs.unlinkSync(listFile);
         reject(err);
       })
