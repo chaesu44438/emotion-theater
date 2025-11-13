@@ -79,7 +79,7 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
             {
               role: "user",
               content: [
-                { type: "text", text: `Create a prompt based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` },
+                { type: "text", text: `Create a DALL-E prompt for a fairy tale illustration based on the user input and the provided image.\n- Character: ${parseInt(age) <= 5 ? `young ${gender} child` : `${age}-year-old ${gender}`}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT SAFETY GUIDELINES:\n- For children 5 years old or younger: Use "young child" or "little character" instead of specific age\n- Do NOT include the character's name in the prompt\n- Focus on fairy tale style, gentle atmosphere, and emotional mood\n- Keep descriptions wholesome and child-friendly` },
                 {
                   type: "image_url",
                   image_url: { "url": referenceImageUrl, "detail": "low" }
@@ -101,7 +101,7 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
           model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
           messages: [
             { role: "system", content: imagePromptSystem },
-            { role: "user", content: `Create a prompt based on this user input:\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` }
+            { role: "user", content: `Create a DALL-E prompt for a fairy tale illustration.\n- Character: ${parseInt(age) <= 5 ? `young ${gender} child` : `${age}-year-old ${gender}`}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT SAFETY GUIDELINES:\n- For children 5 years old or younger: Use "young child" or "little character" instead of specific age\n- Do NOT include the character's name in the prompt\n- Focus on fairy tale style, gentle atmosphere, and emotional mood\n- Keep descriptions wholesome and child-friendly` }
           ],
           max_tokens: 200,
           temperature: 0.6,
@@ -247,7 +247,6 @@ router.post("/regenerate-prompt", async (req, res) => {
     // ✅ [수정] 참조 이미지가 있는 경우와 없는 경우를 분기하여 처리합니다.
     if (referenceImageUrl) {
       console.log("[API] 참조 이미지를 사용하여 삽화 프롬프트를 재생성합니다. (Vision API)");
-      // ✅ [수정] 나이 정보를 명확하게 포함
       imagePromptResponse = await textClient.chat.completions.create({
         model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
         messages: [
@@ -255,7 +254,7 @@ router.post("/regenerate-prompt", async (req, res) => {
           {
             role: "user",
             content: [
-              { type: "text", text: `Create a new, slightly different prompt based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` },
+              { type: "text", text: `Create a new, slightly different DALL-E prompt for a fairy tale illustration based on the user input and the provided image.\n- Character: ${parseInt(age) <= 5 ? `young ${gender} child` : `${age}-year-old ${gender}`}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT SAFETY GUIDELINES:\n- For children 5 years old or younger: Use "young child" or "little character" instead of specific age\n- Do NOT include the character's name in the prompt\n- Focus on fairy tale style, gentle atmosphere, and emotional mood\n- Keep descriptions wholesome and child-friendly` },
               {
                 type: "image_url",
                 image_url: { "url": referenceImageUrl, "detail": "low" }
@@ -272,7 +271,7 @@ router.post("/regenerate-prompt", async (req, res) => {
         model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
         messages: [
           { role: "system", content: imagePromptSystem },
-          { role: "user", content: `Create a new, slightly different prompt based on this user input:\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` }
+          { role: "user", content: `Create a new, slightly different DALL-E prompt for a fairy tale illustration.\n- Character: ${parseInt(age) <= 5 ? `young ${gender} child` : `${age}-year-old ${gender}`}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n\nIMPORTANT SAFETY GUIDELINES:\n- For children 5 years old or younger: Use "young child" or "little character" instead of specific age\n- Do NOT include the character's name in the prompt\n- Focus on fairy tale style, gentle atmosphere, and emotional mood\n- Keep descriptions wholesome and child-friendly` }
         ],
         max_tokens: 200,
         temperature: 0.7,
@@ -479,7 +478,7 @@ ${story}
             {
               role: "user",
               content: [
-                { type: "text", text: `Create a prompt for a scene illustration based on the user input and the provided image.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` },
+                { type: "text", text: `Create a DALL-E prompt for a fairy tale scene illustration based on the user input and the provided image.\n- Character: ${parseInt(age) <= 5 ? `young ${gender} child` : `${age}-year-old ${gender}`}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT SAFETY GUIDELINES:\n- For children 5 years old or younger: Use "young child" or "little character" instead of specific age\n- Do NOT include the character's name in the prompt\n- Focus on fairy tale style, gentle atmosphere, and emotional mood\n- Keep descriptions wholesome and child-friendly` },
                 { type: "image_url", image_url: { "url": referenceImageUrl, "detail": "low" } }
               ]
             }
@@ -493,7 +492,7 @@ ${story}
           model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
           messages: [
             { role: "system", content: imagePromptSystem },
-            { role: "user", content: `Create a prompt for a scene illustration.\n- Character Name: ${name}\n- Age: ${age} years old\n- Gender: ${gender}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT: The character MUST be depicted as a ${age}-year-old ${gender}. Start your prompt with the age and gender descriptor.` }
+            { role: "user", content: `Create a DALL-E prompt for a fairy tale scene illustration.\n- Character: ${parseInt(age) <= 5 ? `young ${gender} child` : `${age}-year-old ${gender}`}\n- Emotion: ${emotion}\n- Comment: ${comment || 'None'}\n- Scene Summary: ${scene.text.substring(0, 150)}\n\nIMPORTANT SAFETY GUIDELINES:\n- For children 5 years old or younger: Use "young child" or "little character" instead of specific age\n- Do NOT include the character's name in the prompt\n- Focus on fairy tale style, gentle atmosphere, and emotional mood\n- Keep descriptions wholesome and child-friendly` }
           ],
           max_tokens: 200,
           temperature: 0.6,
