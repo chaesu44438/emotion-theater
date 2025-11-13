@@ -8,20 +8,34 @@ const path = require("path");
 
 // ✅ [수정] 환경에 따라 ffmpeg 경로 설정
 // Windows 로컬 환경: 프로젝트 내부의 ffmpeg.exe 사용
-// Azure Linux 환경: 시스템에 설치된 ffmpeg 사용
+// Azure Linux 환경: 프로젝트 내부의 ffmpeg (Linux 바이너리) 사용
 const isWindows = process.platform === 'win32';
-const isAzure = process.env.WEBSITE_INSTANCE_ID !== undefined; // Azure 환경 감지
 
-if (isWindows && !isAzure) {
+if (isWindows) {
   // Windows 로컬 개발 환경
   const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg.exe');
   const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe.exe');
-  ffmpeg.setFfmpegPath(ffmpegPath);
-  ffmpeg.setFfprobePath(ffprobePath);
-  console.log('[Video] Windows 환경: 로컬 ffmpeg.exe 사용');
+
+  if (fs.existsSync(ffmpegPath)) {
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    ffmpeg.setFfprobePath(ffprobePath);
+    console.log('[Video] Windows 환경: 로컬 ffmpeg.exe 사용');
+  } else {
+    console.log('[Video] ⚠️ Windows용 ffmpeg.exe를 찾을 수 없습니다.');
+  }
 } else {
-  // Azure Linux 환경 또는 기타 Unix 환경: 시스템 ffmpeg 사용
-  console.log('[Video] Linux/Azure 환경: 시스템 ffmpeg 사용');
+  // Linux/Azure 환경: bin 폴더의 Linux 바이너리 사용
+  const ffmpegPath = path.join(__dirname, '..', 'bin', 'ffmpeg');
+  const ffprobePath = path.join(__dirname, '..', 'bin', 'ffprobe');
+
+  if (fs.existsSync(ffmpegPath)) {
+    ffmpeg.setFfmpegPath(ffmpegPath);
+    ffmpeg.setFfprobePath(ffprobePath);
+    console.log('[Video] Linux 환경: 프로젝트 내 ffmpeg 바이너리 사용');
+    console.log(`[Video] ffmpeg 경로: ${ffmpegPath}`);
+  } else {
+    console.log('[Video] ⚠️ Linux용 ffmpeg 바이너리를 찾을 수 없습니다. 시스템 ffmpeg 사용 시도...');
+  }
 }
 
 const {

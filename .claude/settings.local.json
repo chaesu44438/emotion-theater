@@ -11,7 +11,10 @@
       "Bash(npm install:*)",
       "Bash(ffmpeg:*)",
       "Bash(tasklist:*)",
-      "Bash(npm start)"
+      "Bash(npm start)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

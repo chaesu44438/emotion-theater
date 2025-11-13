@@ -36,15 +36,41 @@ jobs:
       run: |
         npm ci
 
-    # 4. 배포 준비 (불필요한 파일 제거)
+    # 4. Linux용 ffmpeg 다운로드 및 포함
+    - name: 📥 Download ffmpeg for Linux
+      working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+      run: |
+        echo "Downloading ffmpeg static build for Linux..."
+        mkdir -p bin
+        cd bin
+
+        # ffmpeg 정적 빌드 다운로드
+        wget -q https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz
+        tar -xf ffmpeg-release-amd64-static.tar.xz
+
+        # ffmpeg와 ffprobe 파일만 추출
+        FFMPEG_DIR=$(find . -type d -name "ffmpeg-*-static" | head -n 1)
+        cp "$FFMPEG_DIR/ffmpeg" ./ffmpeg
+        cp "$FFMPEG_DIR/ffprobe" ./ffprobe
+        chmod +x ffmpeg ffprobe
+
+        # 압축 파일과 임시 디렉토리 삭제
+        rm -rf ffmpeg-release-amd64-static.tar.xz "$FFMPEG_DIR"
+
+        echo "ffmpeg Linux binary installed successfully!"
+        ./ffmpeg -version
+
+    # 5. 배포 준비 (불필요한 파일 제거)
     - name: 🧹 Clean up
       working-directory: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
       run: |
         echo "Removing dev dependencies and temporary files..."
         rm -rf temp/
         rm -rf test/
+        # Windows용 ffmpeg.exe 삭제 (Linux에서 사용 불가)
+        rm -f bin/*.exe
 
-    # 5. Azure App Service에 배포
+    # 6. Azure App Service에 배포
     - name: 🚀 Deploy to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
@@ -52,7 +78,7 @@ jobs:
         publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
         package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
 
-    # 6. 배포 완료 알림
+    # 7. 배포 완료 알림
     - name: ✅ Deployment completed
       run: |
         echo "🎉 Deployment to Azure completed successfully!"
