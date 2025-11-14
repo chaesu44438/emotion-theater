@@ -240,8 +240,8 @@ function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
     console.log(`[FFMPEG] ffmpeg 경로: ${ffmpegPath}`);
     console.log(`[FFMPEG] ffprobe 경로: ${ffprobePath}`);
 
-    // ✅ [추가] 120초(2분) 타임아웃 설정
-    const timeoutMs = 120000;
+    // ✅ [추가] 300초(5분) 타임아웃 설정 - B1 플랜의 느린 CPU를 고려
+    const timeoutMs = 300000;
     const timeoutId = setTimeout(() => {
       console.error(`[FFMPEG] 타임아웃 (${timeoutMs}ms 초과)`);
       reject(new Error('ffmpeg timeout'));
@@ -294,8 +294,8 @@ function concatenateVideos(videoPaths, outputPath) {
     fs.writeFileSync(listFile, listContent);
     console.log(`[FFMPEG] 결합 목록 파일 생성: ${listFile}`);
 
-    // ✅ [추가] 180초(3분) 타임아웃 설정
-    const timeoutMs = 180000;
+    // ✅ [추가] 600초(10분) 타임아웃 설정 - 4개 장면 결합 시간 고려
+    const timeoutMs = 600000;
     const timeoutId = setTimeout(() => {
       console.error(`[FFMPEG] 결합 타임아웃 (${timeoutMs}ms 초과)`);
       if (fs.existsSync(listFile)) fs.unlinkSync(listFile);

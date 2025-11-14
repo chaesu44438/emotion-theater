@@ -681,6 +681,13 @@ const stopTTS = () => {
   // ✅ 동영상 파일 생성 및 다운로드 핸들러
   // ✅ [수정] useCallback으로 함수가 불필요하게 재생성되는 것을 방지하여 비동기 작업 후의 상태 일관성을 유지합니다.
   const handleGenerateVideo = useCallback(async (story) => {
+    // ✅ [추가] 중복 클릭 방지: 이미 동영상 생성 중이면 무시
+    if (pollingVideoId) {
+      console.log("[VIDEO] 이미 동영상 생성 중입니다. 중복 요청을 무시합니다.");
+      alert("이미 동영상을 생성하고 있습니다. 완료될 때까지 기다려주세요.");
+      return;
+    }
+
     // ✅ [수정] 확인 창 없이 바로 로딩 페이지로 전환합니다.
     setStage('videoGenerating');
     setCurrentVideoStory(story);
@@ -708,7 +715,7 @@ const stopTTS = () => {
         setCurrentVideoStory(s => ({ ...s, error: "동영상 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요." }));
       }
     }
-  }, [voicePref]); // ✅ 의존성 배열: voicePref 값이 바뀔 때만 함수를 새로 만듭니다.
+  }, [voicePref, pollingVideoId]); // ✅ 의존성 배열: voicePref, pollingVideoId 값이 바뀔 때만 함수를 새로 만듭니다.
 
   // ✅ [추가] 로딩 상태에 따라 배경 이미지를 동적으로 결정합니다.
   const isLoading = isGenerating || stage === "videoGenerating";
@@ -1325,8 +1332,9 @@ const stopTTS = () => {
                       </button>
                       <button
                         onClick={() => handleGenerateVideo(it)}
-                        className="px-3 py-2 rounded-lg bg-blue-100 hover:bg-blue-200 text-base"
-                        title="동영상 만들기"
+                        disabled={pollingVideoId}
+                        className={`px-3 py-2 rounded-lg text-base ${pollingVideoId ? 'bg-gray-300 cursor-not-allowed opacity-50' : 'bg-blue-100 hover:bg-blue-200'}`}
+                        title={pollingVideoId ? "동영상 생성 중... 잠시만 기다려주세요" : "동영상 만들기"}
                       >
                         🎬
                       </button>
