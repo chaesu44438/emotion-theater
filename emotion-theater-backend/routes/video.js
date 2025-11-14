@@ -373,7 +373,9 @@ async function processVideoGeneration(story, userData, videoId, tempDir, userTok
 
     for (let i = 0; i < scenes.length; i++) {
       const scene = scenes[i];
-      console.log(`[VIDEO] 장면 ${scene.scene} 처리 중...`);
+      console.log('========================================');
+      console.log(`[VIDEO] 🎬 장면 ${scene.scene}/${scenes.length} 처리 시작`);
+      console.log('========================================');
       console.log(`[VIDEO] 장면 ${scene.scene} 텍스트 내용 (처음 200자):`);
       console.log(scene.text.substring(0, 200));
       console.log('---');
@@ -384,28 +386,36 @@ async function processVideoGeneration(story, userData, videoId, tempDir, userTok
 
       let imageUrl;
       try {
-        // ✅ [수정] DALL-E 이미지 생성
-        const imageResponse = await dalleClient.images.generate({
-          model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
-          prompt: imagePrompt,
-          n: 1,
-          size: "1792x1024", // ✅ [수정] 가로 비율(16:9)로 변경하여 회전 문제 방지
-          quality: "standard",
-        });
-        imageUrl = imageResponse.data[0].url;
-        console.log(`[VIDEO] 장면 ${scene.scene} DALL-E 이미지 생성 완료`);
-      } catch (error) {
-        // ✅ [추가] 콘텐츠 정책 위반 오류 발생 시, 안전한 대체 프롬프트로 재시도합니다.
-        if (error.code === 'content_policy_violation') {
-          console.warn(`[VIDEO] 장면 ${scene.scene}의 프롬프트가 콘텐츠 정책에 위반되어 대체 프롬프트로 재시도합니다.`);
-          const safeImagePrompt = "A beautiful and safe illustration for a children's fairy tale, gentle and heartwarming style, simple background.";
-          const imageResponse = await dalleClient.images.generate({
+        // ✅ [수정] DALL-E 이미지 생성 (120초 타임아웃 추가)
+        console.log(`[VIDEO] 장면 ${scene.scene} DALL-E 이미지 생성 시작...`);
+        const imageResponse = await Promise.race([
+          dalleClient.images.generate({
             model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
-            prompt: safeImagePrompt,
+            prompt: imagePrompt,
             n: 1,
-            size: "1792x1024", // ✅ [수정] 가로 비율(16:9)로 변경하여 회전 문제 방지
+            size: "1792x1024",
             quality: "standard",
-          });
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('DALL-E timeout')), 120000))
+        ]);
+        imageUrl = imageResponse.data[0].url;
+        console.log(`[VIDEO] 장면 ${scene.scene} DALL-E 이미지 생성 완료: ${imageUrl}`);
+      } catch (error) {
+        console.error(`[VIDEO] 장면 ${scene.scene} DALL-E 오류:`, error.message);
+        // ✅ [추가] 콘텐츠 정책 위반 또는 타임아웃 시 대체 프롬프트로 재시도
+        if (error.code === 'content_policy_violation' || error.message === 'DALL-E timeout') {
+          console.warn(`[VIDEO] 장면 ${scene.scene} 대체 프롬프트로 재시도 (이유: ${error.message})`);
+          const safeImagePrompt = "A beautiful and safe illustration for a children's fairy tale, gentle and heartwarming style, simple background.";
+          const imageResponse = await Promise.race([
+            dalleClient.images.generate({
+              model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
+              prompt: safeImagePrompt,
+              n: 1,
+              size: "1792x1024",
+              quality: "standard",
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('DALL-E fallback timeout')), 120000))
+          ]);
           imageUrl = imageResponse.data[0].url;
           console.log(`[VIDEO] 장면 ${scene.scene} 대체 프롬프트로 DALL-E 이미지 생성 완료`);
         } else {
@@ -430,7 +440,9 @@ async function processVideoGeneration(story, userData, videoId, tempDir, userTok
       // ✅ [수정] 오디오 길이에 맞춰 동영상을 생성합니다
       await createVideoFromImageAndAudio(imagePath, audioPath, videoPath);
       sceneVideos.push(videoPath);
-      console.log(`[VIDEO] 장면 ${scene.scene} 비디오 생성 완료`);
+      console.log('========================================');
+      console.log(`[VIDEO] ✅ 장면 ${scene.scene}/${scenes.length} 완료! (남은 장면: ${scenes.length - scene.scene}개)`);
+      console.log('========================================');
     }
 
     // 3. 모든 장면 비디오를 하나로 결합
