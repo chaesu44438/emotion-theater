@@ -185,8 +185,60 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
     // ✅ [추가] 요청이 취소되어 발생한 에러는 클라이언트에 에러 응답을 보내지 않습니다.
     if (error.name === 'AbortError') {
       console.log('[API] 작업이 취소되어 응답을 보내지 않습니다.');
-      // res.status(499)를 보내지 않고 그냥 종료합니다. 클라이언트는 이미 에러를 알고 있습니다.
       return;
+    }
+
+    // ✅ [추가] content_filter 에러 발생 시 더 안전한 프롬프트로 재시도
+    if (error.code === 'content_filter') {
+      console.warn('[API] 콘텐츠 필터 감지 - 더 안전한 프롬프트로 재시도합니다...');
+      try {
+        // 재시도용 안전한 프롬프트 (comment 부분을 제거하고 기본 구조만 사용)
+        const safeStoryPrompt = storyPromptTemplate
+          .replace('{name}', name)
+          .replace('{category}', category === 'child' ? '어린이' : '어른')
+          .replace('{age}', age)
+          .replace('{gender}', gender === 'male' ? '남자' : '여자')
+          .replace('{emotion}', emotion)
+          .replace('{comment}', "긍정적이고 따뜻한 이야기"); // 안전한 기본값 사용
+
+        console.log('[API] 재시도 프롬프트로 동화 생성 중...');
+        const retryStoryResponse = await textClient.chat.completions.create({
+          model: process.env.AZURE_OPENAI_DEPLOYMENT_CHAT,
+          messages: [
+            {
+              role: "system",
+              content: "You are a kind and creative storyteller. This is for educational and therapeutic purposes to help children process emotions through storytelling. Always create wholesome, positive, and child-friendly stories."
+            },
+            { role: "user", content: safeStoryPrompt }
+          ],
+          max_tokens: 2500,
+          temperature: 0.7 // 약간 낮춰서 더 안전하게
+        });
+
+        const story = retryStoryResponse.choices[0]?.message?.content?.trim();
+        if (story) {
+          // 이미지 프롬프트도 안전하게 생성
+          const safeImagePrompt = `A beautiful and heartwarming children's fairy tale illustration, gentle style, simple background, featuring a ${age}-year-old ${gender === 'male' ? 'boy' : 'girl'}`;
+
+          const imageResponse = await dalleClient.images.generate({
+            model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
+            prompt: safeImagePrompt,
+            n: 1,
+            size: "1024x1024",
+            quality: "standard",
+          });
+
+          console.log('[API] 재시도 성공! 안전한 동화 생성 완료');
+          return res.status(200).json({
+            story,
+            illustrationUrl: imageResponse.data[0].url,
+            retried: true // 재시도했음을 표시
+          });
+        }
+      } catch (retryError) {
+        console.error('[API] 재시도 실패:', retryError.message);
+        // 재시도도 실패하면 아래 에러 처리로 넘어감
+      }
     }
 
     // ✅ [추가] 더 자세한 에러 정보 로깅
@@ -203,7 +255,7 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
 
     // 특정 에러 유형별 메시지
     if (error.code === 'content_filter') {
-      userMessage = "입력 내용이 안전 필터에 의해 차단되었습니다. 다른 내용으로 시도해주세요.";
+      userMessage = "입력하신 내용이 안전 필터에 걸렸습니다. 더 긍정적이고 안전한 키워드로 다시 시도해주세요. (예: '놀이터에서 즐겁게 놀기', '가족과 행복한 시간')";
     } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
       userMessage = "Azure OpenAI 서비스에 연결할 수 없습니다. 네트워크를 확인해주세요.";
     } else if (error.message?.includes('timeout')) {
