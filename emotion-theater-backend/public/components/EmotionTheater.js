@@ -1551,26 +1551,6 @@ const stopTTS = () => {
                     💾 동영상 다운로드
                   </a>
 
-                  {/* 모바일 공유 버튼 (Web Share API 지원 시) */}
-                  {navigator.share && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await navigator.share({
-                            title: '동화 동영상',
-                            text: '내가 만든 동화 동영상을 확인해보세요!',
-                            url: apiService.getVideoDownloadUrl(completedVideoId)
-                          });
-                        } catch (err) {
-                          console.log('공유 취소 또는 실패:', err);
-                        }
-                      }}
-                      className="w-full px-6 py-3 bg-purple-100 text-purple-700 rounded-xl font-semibold border border-purple-300 hover:bg-purple-200 transition-all"
-                    >
-                      📤 공유하기
-                    </button>
-                  )}
-
                   <button
                     onClick={() => {
                       setShowVideoCompleteModal(false);
