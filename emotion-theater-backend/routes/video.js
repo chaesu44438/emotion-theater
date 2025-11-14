@@ -254,9 +254,11 @@ function createVideoFromImageAndAudio(imagePath, audioPath, outputPath) {
       .input(audioPath)
       .outputOptions([
         "-c:v libx264",
+        "-preset ultrafast", // ✅ [추가] 인코딩 속도 최우선 (품질 낮춤, 속도 향상)
+        "-crf 28", // ✅ [추가] 품질 낮춤 (기본 23 → 28, 숫자 클수록 낮은 품질/빠른 속도)
         "-tune stillimage",
         "-c:a aac",
-        "-b:a 192k",
+        "-b:a 128k", // ✅ [수정] 오디오 비트레이트 192k → 128k (속도 향상)
         "-pix_fmt yuv420p",
         "-shortest", // 오디오 길이에 맞춰 동영상 생성
       ])
@@ -393,7 +395,7 @@ async function processVideoGeneration(story, userData, videoId, tempDir, userTok
             model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
             prompt: imagePrompt,
             n: 1,
-            size: "1792x1024",
+            size: "1024x1024", // ✅ [수정] 1792x1024 → 1024x1024 (생성 속도 향상, 비용 절감)
             quality: "standard",
           }),
           new Promise((_, reject) => setTimeout(() => reject(new Error('DALL-E timeout')), 120000))
@@ -411,7 +413,7 @@ async function processVideoGeneration(story, userData, videoId, tempDir, userTok
               model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
               prompt: safeImagePrompt,
               n: 1,
-              size: "1792x1024",
+              size: "1024x1024", // ✅ [수정] 대체 이미지도 1024x1024로 생성
               quality: "standard",
             }),
             new Promise((_, reject) => setTimeout(() => reject(new Error('DALL-E fallback timeout')), 120000))

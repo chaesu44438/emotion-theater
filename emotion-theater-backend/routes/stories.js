@@ -153,7 +153,7 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
           model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
           prompt: imagePrompt,
           n: 1,
-          size: "1792x1024",
+          size: "1024x1024", // ✅ [수정] 1792x1024 → 1024x1024 (생성 속도 향상, 비용 절감)
           quality: "standard",
         },
         { signal: signal } // 2. 요청 옵션 (options)
@@ -164,7 +164,7 @@ router.post("/generate", async (req, res) => { // ✅ 이 라우트가 이제 �
         console.warn(`[DALL-E] 프롬프트가 콘텐츠 정책에 위반되어 대체 프롬프트로 재시도합니다.`);
         const safeImagePrompt = "A beautiful and safe illustration for a children's fairy tale, gentle and heartwarming style, simple background.";
         imageResponse = await dalleClient.images.generate(
-          { model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE, prompt: safeImagePrompt, n: 1, size: "1792x1024", quality: "standard" },
+          { model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE, prompt: safeImagePrompt, n: 1, size: "1024x1024", quality: "standard" },
           { signal: signal }
         );
         console.log(`[DALL-E] 대체 프롬프트로 이미지 생성 성공`);
@@ -288,7 +288,7 @@ router.post("/regenerate-prompt", async (req, res) => {
       model: process.env.AZURE_OPENAI_DEPLOYMENT_IMAGE,
       prompt: imagePrompt,
       n: 1,
-      size: "1792x1024",
+      size: "1024x1024", // ✅ [수정] 1792x1024 → 1024x1024
     });
 
     res.status(200).json({ illustrationUrl: imageResponse.data[0].url });
